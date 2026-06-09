@@ -1,4 +1,4 @@
-"""Core data model for epub-translation-prepare.
+"""Core data model for epub-deepl-prepare.
 
 Plain dataclasses — no lxml types in model layer (keeps model serialisation-agnostic).
 """

@@ -34,9 +34,9 @@ epub-deepl-prepare/
 │   ├── tech-spec.md           ← this document
 │   └── test-plan.md
 ├── src/
-│   └── epub_translation_prepare/
+│   └── epub_deepl_prepare/
 │       ├── __init__.py
-│       ├── __main__.py        ← `python -m epub_translation_prepare`
+│       ├── __main__.py        ← `python -m epub_deepl_prepare`
 │       ├── cli.py             ← argparse, dispatch to prepare/restore
 │       ├── errors.py          ← typed exception hierarchy
 │       ├── logging_setup.py   ← stderr formatting, --verbose flag

@@ -1,4 +1,4 @@
-"""Typed exception hierarchy for epub-translation-prepare.
+"""Typed exception hierarchy for epub-deepl-prepare.
 
 Exit code mapping:
     UserError subclasses → exit code 1

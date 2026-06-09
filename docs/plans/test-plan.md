@@ -278,7 +278,7 @@ check is blind to ZIP-level violations.
 
 ### 7.1 `tests/integration/test_cli.py`
 
-Uses subprocess invocation (`python -m epub_translation_prepare ...`) or
+Uses subprocess invocation (`python -m epub_deepl_prepare ...`) or
 the `cli.main()` entry point with captured `sys.argv` — preferred for
 faster runs.
 
@@ -413,7 +413,7 @@ In `pyproject.toml`:
 
 ```toml
 [tool.coverage.run]
-source = ["src/epub_translation_prepare"]
+source = ["src/epub_deepl_prepare"]
 branch = true
 
 [tool.coverage.report]

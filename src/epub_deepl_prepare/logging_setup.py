@@ -1,4 +1,4 @@
-"""Stderr logging configuration for epub-translation-prepare.
+"""Stderr logging configuration for epub-deepl-prepare.
 
 Format: [LEVEL] message  (no timestamps; tool runs are short)
 Levels: ERROR, WARN, INFO (only with --verbose)

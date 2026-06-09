@@ -14,69 +14,33 @@ identifiers.
 **Status:** MVP draft v1. Targets EPUB 2.0 + NCX (the format of the typical
 corpus). EPUB 3 + `nav.xhtml` is out of MVP scope.
 
-## Tech Stack
+## Install
 
-| Layer | Choice | Why |
-|---|---|---|
-| Language | Python ≥ 3.11 | Modern typing, pattern matching, `tomllib` |
-| XML / HTML | `lxml ≥ 5.0` (only non-stdlib runtime dep) | Cython libxml2; handles XHTML 1.1, HTML5, namespaced XML uniformly |
-| Packaging / build | `hatchling` + `hatch` | PEP 517, minimal boilerplate |
-| Test runner | `pytest ≥ 8` + `pytest-cov` | Standard; parametrized corpus tests |
-| Lint + format | `ruff` | Replaces flake8, isort, black, pyupgrade |
-| Type check | `mypy --strict` + `lxml-stubs` | Hard guarantee for structural-fidelity contract |
-| Dev environment | Dev Container (`debian:bookworm-slim` base) | Reproducible across hosts; no UID-1000 baked-in |
-| Manual EPUB validation | `epubcheck 5.1.0` (W3C) — pre-installed in container | Out-of-band release gate |
-
-Full rationale and alternatives considered: [`docs/plans/tech-stack.md`](docs/plans/tech-stack.md).
-
-## Getting Started
-
-### Prerequisites
-
-The recommended workflow uses the project's Dev Container, which provisions
-every tool listed above without polluting the host:
-
-- Docker Engine ≥ 20.10 (or Podman with `docker` shim)
-- `@devcontainers/cli` (`npm install -g @devcontainers/cli`)
-- A JetBrains IDE (PyCharm preferred) **or** plain shell access
-
-Native (non-container) install also works on any host with Python 3.11+ and
-the system packages `libxml2-dev libxslt1-dev zlib1g-dev` (Debian / Ubuntu)
-or equivalents.
-
-### Installation — Dev Container (recommended)
-
-```bash
-git clone <your-fork> epub-deepl-prepare
-cd epub-deepl-prepare
-devcontainer up --workspace-folder .
-devcontainer exec --workspace-folder . bash -lc 'source .venv/bin/activate && epub-deepl-prepare --help'
-```
-
-First `devcontainer up` builds the Debian-based image, installs the
-`common-utils` feature (which creates the non-root `devcontainer` user with
-UID matched to the host), runs the post-create script that creates `.venv`
-and `pip install -e ".[dev]"`. Subsequent runs reuse the cached image.
-
-The `/tmp/nowe` directory is bind-mounted **read-only** into the container
-as the test corpus location — if you keep your EPUB collection elsewhere,
-edit `mounts` in `.devcontainer/devcontainer.json`.
-
-### Installation — native
+The tool is a standard Python package. Any environment with Python 3.11+ and
+the system libraries for `lxml` (typically present, or installable via
+`apt install libxml2 libxslt1.1`) is sufficient.
 
 ```bash
 git clone <your-fork> epub-deepl-prepare
 cd epub-deepl-prepare
 python3.11 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e .
 epub-deepl-prepare --help
 ```
 
-### Running
+If you prefer to invoke the tool without activating the virtualenv each
+session, use the `bin/` launcher (see below) or symlink it into a directory
+on your `PATH`.
 
-The CLI has two subcommands, intended to be invoked around a manual DeepL
-upload / download step.
+> **Contributing or developing the tool?** See
+> [CONTRIBUTING.md](CONTRIBUTING.md) for the recommended Dev Container
+> workflow, test commands, and code style.
+
+## Usage
+
+The CLI has two subcommands, designed around a manual DeepL upload/download
+step.
 
 ```bash
 # 1. Bundle the EPUB into a single HTML for DeepL
@@ -91,12 +55,17 @@ epub-deepl-prepare restore path/to/book.epub path/to/book.translated.html --lang
 #   → produces path/to/book.translated.epub
 ```
 
-#### `bin/` launcher (no venv activation)
+The original EPUB is read-only during `restore` and acts as the structural
+template; only translated body content, OPF metadata (`dc:title`,
+`dc:description`, `dc:subject`, `dc:language`), and NCX navigation labels
+are mutated.
 
-`bin/epub-deepl-prepare` is a thin Bash wrapper that locates the
-project's `.venv` interpreter directly. Use it when you want to invoke the
-tool from outside the activated virtualenv (e.g. from a shell alias, a cron
-job, or your editor's external-tool integration):
+### `bin/` launcher (no venv activation)
+
+`bin/epub-deepl-prepare` is a thin Bash wrapper that self-locates the
+project's `.venv` interpreter directly. Use it when invoking the tool from
+outside an activated virtualenv — shell aliases, cron jobs, editor
+integrations:
 
 ```bash
 # Run from any directory
@@ -107,23 +76,16 @@ ln -s "$(pwd)/bin/epub-deepl-prepare" ~/.local/bin/
 epub-deepl-prepare prepare book.epub
 ```
 
-The wrapper self-locates via `${BASH_SOURCE[0]}` and execs
-`.venv/bin/python -m epub_translation_prepare`. It fails fast with a
-diagnostic if the virtualenv is missing.
+The wrapper fails fast with a diagnostic if the virtualenv is missing.
 
-The original EPUB is read-only during `restore` and acts as the structural
-template; only translated body content, OPF metadata (`dc:title`,
-`dc:description`, `dc:subject`, `dc:language`), and NCX navigation labels
-are mutated.
-
-## Available Commands
+## Commands
 
 | Command | Description |
 |---|---|
-| `epub-deepl-prepare prepare <input.epub>` | Validate input EPUB and emit `<stem>.prepare.html` |
+| `epub-deepl-prepare prepare <input.epub>` | Validate input and emit `<stem>.prepare.html` |
 | `epub-deepl-prepare restore <input.epub> <translated.html> --lang <code>` | Validate translated HTML against the input EPUB and emit `<stem>.translated.epub` |
-| `epub-deepl-prepare --help` | Show top-level usage |
-| `<subcommand> --help` | Show flags for a specific subcommand |
+| `epub-deepl-prepare --help` | Top-level usage |
+| `<subcommand> --help` | Flags for a specific subcommand |
 
 Common flags on both subcommands:
 
@@ -135,28 +97,6 @@ Common flags on both subcommands:
 
 Exit codes: `0` success, `1` user error (bad input / validation failure /
 output collision), `2` internal error.
-
-### Developer commands (inside the Dev Container)
-
-```bash
-source .venv/bin/activate
-
-# Run the full test suite (unit + synth integration + corpus on /tmp/nowe)
-pytest -m 'not corpus or corpus'
-
-# Fast tests only (skip corpus)
-pytest
-
-# Lint and format
-ruff check src tests
-ruff format src tests
-
-# Strict type check
-mypy --strict src/epub_translation_prepare
-
-# Manual EPUB validation (post-release gate per SM-4)
-epubcheck path/to/output.translated.epub
-```
 
 ## How It Works
 
@@ -177,10 +117,10 @@ that fragment ID in the restored XHTML and uses its translated heading
 text — guaranteeing TOC ↔ chapter-heading consistency without translating
 the labels twice.
 
-Detailed architecture, data model, and edge cases:
+Detailed architecture and edge cases:
 [`docs/plans/tech-spec.md`](docs/plans/tech-spec.md).
 
-## Project Scope
+## Scope
 
 ### In scope (MVP)
 
@@ -196,26 +136,13 @@ Detailed architecture, data model, and edge cases:
 
 - EPUB 3 with `nav.xhtml` navigation (deferred — post-MVP)
 - DRM-protected EPUBs (detected and rejected; never supported)
-- Automated DeepL API integration (user does the upload manually)
+- Automated DeepL API integration (user uploads manually)
 - Automated `epubcheck` invocation (manual user step)
 - Books exceeding DeepL's per-document character limit
 - GUI, web interface, daemon mode, multi-user features
 - Translation memory, caching, or glossary support
 
 Full requirements with user stories: [`docs/plans/prd.md`](docs/plans/prd.md).
-
-## Quality Gates
-
-The MVP holds the following invariants, all verified automatically inside
-the Dev Container:
-
-| Gate | Verification |
-|---|---|
-| Round-trip integrity without translation | `diff -r` of unzipped EPUBs + ZIP-level invariants (mimetype-first, STORED, `flag_bits=0`) — green across the 4-book test corpus |
-| EPUB validity preservation | `epubcheck` reports identical fatal / error / warning counts before and after round-trip (zero drift) |
-| SVG / MathML attribute case | `viewBox`, `preserveAspectRatio`, etc. preserved on output (epubcheck-required) |
-| Adversarial DeepL simulation | Random-seeded fixture strips `data-*`, reorders attributes, collapses whitespace; restore must either succeed correctly or fail with a precise diagnostic |
-| Anchor resolution scoping | NCX label lookup scoped per-XHTML; no ID-collision cross-file false positives |
 
 ## Project Status
 
@@ -224,21 +151,13 @@ workbook genres; all EPUB 2.0 + NCX). All 118 unit and integration tests
 pass; full corpus round-trip preserves epubcheck baseline (0 errors in →
 0 errors out).
 
-Open items tracked in [`docs/plans/devils-advocate-review.md`](docs/plans/devils-advocate-review.md):
-- R-8 spike (real DeepL preserves `data-*` attributes) — manual verification recommended before first production use
+Open items tracked in
+[`docs/plans/devils-advocate-review.md`](docs/plans/devils-advocate-review.md):
+- R-8 spike (real DeepL preserves `data-*` attributes) — manual
+  verification recommended before first production use
 - EPUB 3 + `nav.xhtml` support — deferred to post-MVP
-- Apple Books / Calibre-specific metadata quirks — observed but not specially handled
-
-## Documentation Layout
-
-```
-docs/plans/
-├── prd.md                       Requirements, user stories US-001…US-020, success metrics SM-1…SM-7
-├── tech-stack.md                Technology choices, dependency analysis, alternatives rejected
-├── tech-spec.md                 Internal architecture, data model, flows, anchor resolution, ZIP packaging
-├── test-plan.md                 Test pyramid, fixture strategy, coverage matrix
-└── devils-advocate-review.md    Critical findings (C-1…C-4) + adversarial review
-```
+- Apple Books / Calibre-specific metadata quirks — observed but not
+  specially handled
 
 ## License
 
