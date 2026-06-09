@@ -8,13 +8,21 @@
 # first. Suitable for placement on PATH (symlink into ~/.local/bin), or for
 # invocation as ./bin/epub-deepl-prepare from a checkout.
 #
+# The launcher proactively detects a venv ↔ host Python minor-version mismatch
+# (common when ``.venv`` was created inside the Dev Container with one Python
+# minor but the launcher is invoked from a host whose ``/usr/bin/python3`` is a
+# different minor — Python's per-minor ``site-packages`` layout makes the
+# venv's installed packages unreachable in that case). On mismatch it emits a
+# concrete remediation message instead of the bare ``No module named …`` that
+# Python would otherwise produce.
+#
 # Usage:
 #     bin/epub-deepl-prepare [GLOBAL_OPTIONS] <prepare|restore> [ARGS]
 #     bin/epub-deepl-prepare --help
 #
 # Exit codes:
 #     0  success (forwarded from the Python CLI)
-#     1  user error (forwarded; or .venv missing)
+#     1  user error (forwarded; or environment misconfiguration detected here)
 #     2  internal error (forwarded)
 #
 
@@ -36,13 +44,48 @@ function project_root() {
     dirname -- "$(dirname -- "${source_path}")"
 }
 
+# Read the ``version = X.Y.Z`` line from a ``pyvenv.cfg`` and echo ``X.Y``.
+# Returns 1 if the file does not exist or the field is missing/unparseable.
+function venv_expected_minor() {
+    local cfg="$1"
+    [[ -f "${cfg}" ]] || return 1
+    local raw
+    raw="$(awk -F' *= *' '/^version *=/ {print $2; exit}' "${cfg}")"
+    [[ -n "${raw}" ]] || return 1
+    # Strip any patch component: 3.11.2 → 3.11; 3.11 stays 3.11.
+    printf '%s\n' "${raw%.*}"
+}
+
+# Echo ``X.Y`` reported by the given Python interpreter.
+function python_actual_minor() {
+    "$1" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null
+}
+
 function main() {
-    local root
+    local root python_bin pyvenv_cfg expected actual
     root="$(project_root)"
-    local python_bin="${root}/.venv/bin/python"
+    python_bin="${root}/.venv/bin/python"
+    pyvenv_cfg="${root}/.venv/pyvenv.cfg"
 
     if [[ ! -x "${python_bin}" ]]; then
-        die "virtualenv not found at ${root}/.venv (run 'devcontainer up' or 'python -m venv .venv && pip install -e .[dev]')"
+        die "virtualenv not found at ${root}/.venv (run 'devcontainer up' or 'python3 -m venv .venv && .venv/bin/pip install -e .[dev]')"
+    fi
+
+    # Best-effort minor-version compatibility check. If either side cannot be
+    # resolved (missing pyvenv.cfg, exotic Python build), skip the check and
+    # let the subsequent exec speak for itself.
+    expected="$(venv_expected_minor "${pyvenv_cfg}" 2>/dev/null || true)"
+    actual="$(python_actual_minor "${python_bin}" 2>/dev/null || true)"
+    if [[ -n "${expected}" && -n "${actual}" && "${expected}" != "${actual}" ]]; then
+        die "venv at ${root}/.venv was built with Python ${expected}, but '.venv/bin/python' currently resolves to Python ${actual}.
+
+Per-minor-version site-packages means the installed packages are unreachable from a mismatched interpreter.
+Most common cause: the venv was created inside the Dev Container (Python ${expected}) and is now being
+invoked from a host with a different Python (${actual}).
+
+Two fixes:
+  - Rebuild on the host:   rm -rf '${root}/.venv' && python3 -m venv '${root}/.venv' && '${root}/.venv/bin/pip' install -e '${root}[dev]'
+  - Or invoke via container: devcontainer exec --workspace-folder '${root}' epub-deepl-prepare ..."
     fi
 
     exec "${python_bin}" -m epub_deepl_prepare "$@"
