@@ -1,0 +1,88 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "epub-translation-prepare"
+version = "0.1.0"
+description = "Prepare EPUB files for round-trip translation via DeepL"
+requires-python = ">=3.11"
+dependencies = ["lxml>=5.0"]
+
+[project.scripts]
+epub-translation-prepare = "epub_translation_prepare.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-cov",
+    "ruff",
+    "mypy",
+    "lxml-stubs",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/epub_translation_prepare"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "PL", "PTH"]
+ignore = [
+    "PLR0912",  # too-many-branches
+    "PLR0913",  # too-many-arguments
+    "PLR0915",  # too-many-statements
+    "PLR2004",  # magic-value-comparison
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Test helpers legitimately import lxml lazily and use local imports to keep
+# fixture load time low. Magic numbers in assertions are intentional.
+"tests/**/*.py" = [
+    "PLC0415",  # import-outside-top-level
+    "PLR2004",  # magic-value-comparison
+    "F401",     # unused-import (test scaffolding sometimes imports for side effect)
+    "PLR0911",  # too-many-return-statements
+    "PLR0913",  # too-many-arguments
+    "B011",     # assert False (intentional in adversarial fixtures)
+    "S101",     # use of assert (pytest)
+    "SIM105",   # try/except/pass — clearer than contextlib.suppress in test scaffolding
+    "SIM117",   # nested with — pytest temp-file patterns
+    "PTH123",   # open() vs Path.open() — pytest tmp_path patterns
+]
+
+[tool.mypy]
+strict = true
+warn_unused_ignores = true
+disallow_any_generics = true
+python_version = "3.11"
+mypy_path = "src"
+
+[[tool.mypy.overrides]]
+module = "lxml.*"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra -q --strict-markers -m 'not corpus'"
+markers = [
+    "unit: fast, no I/O beyond temp files",
+    "integration: synthetic EPUB end-to-end",
+    "corpus: requires /tmp/nowe; opt-in",
+]
+
+[tool.coverage.run]
+source = ["src/epub_translation_prepare"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 85
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]
