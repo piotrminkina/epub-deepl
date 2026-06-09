@@ -272,6 +272,23 @@ check is blind to ZIP-level violations.
 - `test_parser_blocks_network_access`
 - `test_parser_rejects_huge_tree`
 
+### 6.8 `tests/unit/test_bcp47.py`
+
+Well-formedness check (per BCP 47 grammar; not registry lookup) and
+primary-subtag extraction. Powers the US-009 lang resolver.
+
+- `test_is_well_formed_accepts_valid_tags` (parametrized: `pl`, `EN`,
+  `en-US`, `en-us`, `pt-BR`, `zh-Hant`, `zh-Hant-TW`, `en-US-x-private`,
+  `i-klingon`, `x-private`, `a`)
+- `test_is_well_formed_rejects_invalid` (parametrized: empty, whitespace,
+  trailing/leading space, internal space, underscore separator,
+  leading/trailing hyphen, empty subtag, digit-leading primary, subtag
+  > 8 chars, slash)
+- `test_is_well_formed_rejects_non_string`
+- `test_primary_subtag` (parametrized: case folding, region stripped,
+  empty)
+- `test_primary_subtag_non_string_returns_empty`
+
 ---
 
 ## 7. Integration Test Specifications
@@ -305,6 +322,15 @@ faster runs.
 - `test_ruby_does_not_affect_exit_code`
 - `test_verbose_flag_emits_per_file_progress`
 - `test_no_output_on_stdout_in_normal_run`
+- **US-009 lang resolution:**
+  - `test_lang_auto_detected_from_translated_html`
+  - `test_lang_explicit_flag_overrides_detected_with_warning`
+  - `test_lang_region_subtag_passed_through_to_opf` (`pt-BR` → `<dc:language>pt-BR</dc:language>`)
+  - `test_lang_missing_in_html_and_no_flag_raises`
+  - `test_lang_whitespace_only_in_html_treated_as_missing`
+  - `test_lang_malformed_explicit_flag_rejected`
+  - `test_lang_drift_warning_when_primary_subtag_unchanged` (source `en`, target `en-GB` → WARN)
+  - `test_lang_no_drift_warning_when_primary_subtag_changes` (source `en`, target `pl` → silent)
 
 ### 7.2 `tests/integration/test_roundtrip.py`
 

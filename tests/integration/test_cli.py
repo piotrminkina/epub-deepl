@@ -298,3 +298,178 @@ def test_no_output_on_stdout_in_normal_run(
     main(["prepare", str(synth_epub_file), "--output", str(tmp_path / "out.html")])
     captured = capsys.readouterr()
     assert captured.out == "", f"Unexpected stdout: {captured.out!r}"
+
+
+# ---------------------------------------------------------------------------
+# Target language resolution (US-009 update — --lang now optional)
+# ---------------------------------------------------------------------------
+
+
+def _prepare_then_set_html_lang(
+    synth_epub_file: pathlib.Path,
+    tmp_path: pathlib.Path,
+    new_lang: str | None,
+) -> pathlib.Path:
+    """Prepare the synthetic EPUB, then mutate the merged HTML's <html lang>
+    so we can exercise the lang-resolution paths without round-tripping
+    through DeepL. Returns the modified HTML path.
+    """
+    html_out = tmp_path / "prepared.html"
+    rc, _ = _run_cli(["prepare", str(synth_epub_file), "--output", str(html_out)])
+    assert rc == 0
+    content = html_out.read_text(encoding="utf-8")
+    if new_lang is None:
+        # Remove the lang attribute entirely
+        content = content.replace('<html lang="en">', "<html>")
+    else:
+        content = content.replace(
+            '<html lang="en">', f'<html lang="{new_lang}">'
+        )
+    html_out.write_text(content, encoding="utf-8")
+    return html_out
+
+
+@pytest.mark.integration
+def test_lang_auto_detected_from_translated_html(
+    synth_epub_file: pathlib.Path, tmp_path: pathlib.Path
+) -> None:
+    """When --lang is omitted, the target language is auto-detected from
+    the translated HTML's <html lang> attribute (US-009)."""
+    html = _prepare_then_set_html_lang(synth_epub_file, tmp_path, "pl")
+    epub_out = tmp_path / "auto.epub"
+    rc, stderr = _run_cli([
+        "--verbose", "restore", str(synth_epub_file), str(html),
+        "--output", str(epub_out),
+    ])
+    assert rc == 0
+    assert "Auto-detected target language 'pl'" in stderr
+
+    # Verify <dc:language>pl</dc:language> in the output OPF
+    import zipfile
+    with zipfile.ZipFile(epub_out) as zf:
+        opf = next(n for n in zf.namelist() if n.endswith(".opf"))
+        opf_bytes = zf.read(opf)
+    assert b"<dc:language>pl</dc:language>" in opf_bytes
+
+
+@pytest.mark.integration
+def test_lang_explicit_flag_overrides_detected_with_warning(
+    synth_epub_file: pathlib.Path, tmp_path: pathlib.Path
+) -> None:
+    """When --lang is given and differs from <html lang>, the explicit
+    value wins and a WARN is emitted naming both."""
+    html = _prepare_then_set_html_lang(synth_epub_file, tmp_path, "pl")
+    epub_out = tmp_path / "override.epub"
+    rc, stderr = _run_cli([
+        "restore", str(synth_epub_file), str(html),
+        "--lang", "de", "--output", str(epub_out),
+    ])
+    assert rc == 0
+    assert "[WARN]" in stderr
+    assert "'de'" in stderr and "'pl'" in stderr
+    assert "overrides" in stderr
+
+    import zipfile
+    with zipfile.ZipFile(epub_out) as zf:
+        opf = next(n for n in zf.namelist() if n.endswith(".opf"))
+        opf_bytes = zf.read(opf)
+    assert b"<dc:language>de</dc:language>" in opf_bytes
+
+
+@pytest.mark.integration
+def test_lang_region_subtag_passed_through_to_opf(
+    synth_epub_file: pathlib.Path, tmp_path: pathlib.Path
+) -> None:
+    """Region subtag survives the round-trip verbatim (BCP 47 pass-through;
+    EPUB OPF uses the same grammar as HTML5 lang)."""
+    html = _prepare_then_set_html_lang(synth_epub_file, tmp_path, "pt-BR")
+    epub_out = tmp_path / "region.epub"
+    rc, _ = _run_cli([
+        "restore", str(synth_epub_file), str(html),
+        "--output", str(epub_out),
+    ])
+    assert rc == 0
+    import zipfile
+    with zipfile.ZipFile(epub_out) as zf:
+        opf = next(n for n in zf.namelist() if n.endswith(".opf"))
+        opf_bytes = zf.read(opf)
+    assert b"<dc:language>pt-BR</dc:language>" in opf_bytes
+
+
+@pytest.mark.integration
+def test_lang_missing_in_html_and_no_flag_raises(
+    synth_epub_file: pathlib.Path, tmp_path: pathlib.Path
+) -> None:
+    """Both <html lang> absent AND --lang omitted → exit 1 with hint."""
+    html = _prepare_then_set_html_lang(synth_epub_file, tmp_path, None)
+    rc, stderr = _run_cli([
+        "restore", str(synth_epub_file), str(html),
+        "--output", str(tmp_path / "fail.epub"),
+    ])
+    assert rc == 1
+    assert "[ERROR]" in stderr
+    assert "--lang" in stderr
+
+
+@pytest.mark.integration
+def test_lang_whitespace_only_in_html_treated_as_missing(
+    synth_epub_file: pathlib.Path, tmp_path: pathlib.Path
+) -> None:
+    """A whitespace-only <html lang="   "> is treated as missing per EPUB
+    spec's trim-before-process rule."""
+    html = _prepare_then_set_html_lang(synth_epub_file, tmp_path, "   ")
+    rc, stderr = _run_cli([
+        "restore", str(synth_epub_file), str(html),
+        "--output", str(tmp_path / "ws.epub"),
+    ])
+    assert rc == 1
+    assert "--lang" in stderr
+
+
+@pytest.mark.integration
+def test_lang_malformed_explicit_flag_rejected(
+    synth_epub_file: pathlib.Path, tmp_path: pathlib.Path
+) -> None:
+    """A malformed --lang value fails fast with a clear message."""
+    html = _prepare_then_set_html_lang(synth_epub_file, tmp_path, "pl")
+    rc, stderr = _run_cli([
+        "restore", str(synth_epub_file), str(html),
+        "--lang", "not a tag",
+        "--output", str(tmp_path / "bad.epub"),
+    ])
+    assert rc == 1
+    assert "[ERROR]" in stderr
+    assert "well-formed BCP 47" in stderr
+
+
+@pytest.mark.integration
+def test_lang_drift_warning_when_primary_subtag_unchanged(
+    synth_epub_file: pathlib.Path, tmp_path: pathlib.Path
+) -> None:
+    """If the chosen target's primary subtag matches the source EPUB's,
+    emit a WARN (possible failed translation). Source is 'en'; we set
+    the translated HTML to 'en-GB' to keep the primary identical."""
+    html = _prepare_then_set_html_lang(synth_epub_file, tmp_path, "en-GB")
+    epub_out = tmp_path / "drift.epub"
+    rc, stderr = _run_cli([
+        "restore", str(synth_epub_file), str(html),
+        "--output", str(epub_out),
+    ])
+    assert rc == 0
+    assert "[WARN]" in stderr
+    assert "primary subtag matches" in stderr
+
+
+@pytest.mark.integration
+def test_lang_no_drift_warning_when_primary_subtag_changes(
+    synth_epub_file: pathlib.Path, tmp_path: pathlib.Path
+) -> None:
+    """Source is 'en', target 'pl' — different primary subtag, no drift."""
+    html = _prepare_then_set_html_lang(synth_epub_file, tmp_path, "pl")
+    epub_out = tmp_path / "nodrift.epub"
+    rc, stderr = _run_cli([
+        "restore", str(synth_epub_file), str(html),
+        "--output", str(epub_out),
+    ])
+    assert rc == 0
+    assert "primary subtag matches" not in stderr

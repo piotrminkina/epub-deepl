@@ -18,6 +18,7 @@ import sys
 import traceback
 
 from epub_deepl_prepare import __version__
+from epub_deepl_prepare.epub._bcp47 import is_well_formed, primary_subtag
 from epub_deepl_prepare.epub.reader import read_epub
 from epub_deepl_prepare.epub.validator import (
     check_output_not_exists,
@@ -79,9 +80,16 @@ def _make_parser() -> argparse.ArgumentParser:
     )
     res.add_argument(
         "--lang",
-        required=True,
+        required=False,
+        default=None,
         metavar="CODE",
-        help="Target language code (BCP 47, e.g. pl, en, de, pt-BR)",
+        help=(
+            "Target language code (BCP 47, e.g. pl, en, de, pt-BR). "
+            "Optional: auto-detected from the translated HTML's "
+            "<html lang> attribute when omitted. Pass explicitly to "
+            "override the detected value or when the translated HTML "
+            "lacks a lang attribute."
+        ),
     )
     res.add_argument(
         "--output",
@@ -144,7 +152,6 @@ def _run_prepare(args: argparse.Namespace) -> int:
 def _run_restore(args: argparse.Namespace) -> int:
     input_path = args.input
     translated_path = args.translated
-    target_lang = args.lang
     output_path = args.output or _default_restore_output(input_path)
 
     # US-018
@@ -164,10 +171,77 @@ def _run_restore(args: argparse.Namespace) -> int:
     _log.info("Parsing translated HTML: %s", translated_path)
     doc = parse_translated_html(translated_path)
 
+    target_lang = _resolve_target_lang(args.lang, doc.html_lang, epub.metadata.language)
+
     _log.info("Applying translations and writing output: %s", output_path)
     apply_and_write(epub, doc, target_lang, output_path)
 
     return 0
+
+
+def _resolve_target_lang(
+    explicit: str | None,
+    detected: str | None,
+    source: str | None,
+) -> str:
+    """Choose the OPF ``<dc:language>`` value for the restored EPUB.
+
+    Resolution order (US-009):
+
+    1. ``--lang CODE`` (force; emits WARN if it differs from the
+       detected ``<html lang>`` value — usually a sign the user did
+       not realise auto-detect would work).
+    2. ``<html lang>`` in the translated HTML, well-formed per BCP 47.
+    3. Otherwise raise ``UserError`` with a remediation hint.
+
+    Both EPUB OPF and HTML5 declare BCP 47 / RFC 5646 as the tag syntax
+    (W3C EPUB Packages §5.6.3, HTML Living Standard) so the detected
+    value is passed through verbatim — no region stripping, no case
+    normalisation. Pass-through is the only honest choice when both
+    surfaces share the same grammar.
+
+    Drift warning: if the chosen target's primary subtag matches the
+    source EPUB's primary subtag (case-insensitive), translation may
+    not have happened — emit WARN, do not fail.
+    """
+    chosen: str | None = None
+    if explicit is not None:
+        if not is_well_formed(explicit):
+            raise UserError(
+                f"--lang value {explicit!r} is not a well-formed BCP 47 tag "
+                f"(expected e.g. 'pl', 'en-US', 'pt-BR')"
+            )
+        chosen = explicit
+        if detected and detected != explicit:
+            _log.warning(
+                "--lang %r overrides target language %r detected in translated HTML",
+                explicit,
+                detected,
+            )
+    elif detected is not None:
+        if not is_well_formed(detected):
+            raise UserError(
+                f"<html lang={detected!r}> in the translated HTML is not a "
+                f"well-formed BCP 47 tag; pass --lang explicitly"
+            )
+        chosen = detected
+        _log.info("Auto-detected target language %r from translated HTML", detected)
+    else:
+        raise UserError(
+            "target language not declared in the translated HTML's "
+            "<html lang> attribute; pass --lang CODE explicitly"
+        )
+
+    # Drift detection (does NOT fail — informational only).
+    if source and primary_subtag(source) == primary_subtag(chosen):
+        _log.warning(
+            'translated HTML declares language %r whose primary subtag matches '
+            'the source EPUB (%r); verify that translation actually happened',
+            chosen,
+            source,
+        )
+
+    return chosen
 
 
 def _dispatch(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:

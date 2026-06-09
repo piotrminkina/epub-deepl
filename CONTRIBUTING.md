@@ -160,16 +160,21 @@ runtime requirement; cost > benefit for the MVP) — run it manually
 before each release:
 
 ```bash
-# Round-trip-without-translation should produce zero new errors
+# Round-trip-without-translation should produce zero new errors.
+# --lang is unnecessary when the merged HTML still carries the original
+# source language; pass it explicitly to force a different value.
 epub-deepl-prepare prepare /tmp/nowe/<book>.epub
 epub-deepl-prepare restore /tmp/nowe/<book>.epub \
     /tmp/nowe/<book>.prepare.html \
-    --lang en \
     --output /tmp/<book>.translated.epub
 
 epubcheck /tmp/nowe/<book>.epub                  # baseline
 epubcheck /tmp/<book>.translated.epub             # after round-trip
 ```
+
+The drift warning emitted on round-trip-without-translation is expected
+(the source language is preserved unchanged) — it's the same mechanism
+that catches a real failed-translation upload.
 
 The acceptance criterion: identical fatal / error / warning counts
 before and after. Any new error introduced by the tool is a bug.

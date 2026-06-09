@@ -298,16 +298,55 @@ Notes:
 ### 5.1 Sequence
 
 ```
-1. cli.parse_args()                             → RestoreArgs(input_epub, html, lang, output, force)
+1. cli.parse_args()                             → RestoreArgs(input_epub, html, lang|None, output, force)
 2. validator.check_output_exists(...)
 3. reader.read_epub(input_epub)                 → Epub (used as template)
-4. parser.parse_translated_html(html_path)      → TranslatedDoc
-5. validator.validate_translated(epub, doc)     → raise TranslatedHtmlMismatch if mismatch
-6. applier.apply(epub, doc, lang)               → updates epub.metadata, epub.ncx,
+4. parser.parse_translated_html(html_path)      → TranslatedDoc (incl. html_lang)
+5. cli._resolve_target_lang(args.lang, doc.html_lang, epub.metadata.language)
+                                                → target_lang (per US-009; §5.1a)
+6. validator.validate_translated(epub, doc)     → raise TranslatedHtmlMismatch if mismatch
+7. applier.apply(epub, doc, target_lang)        → updates epub.metadata, epub.ncx,
                                                   epub.xhtmls in place
-7. writer.write_epub(epub, output_path)         → ZIP with mimetype-first STORED
-8. exit 0
+8. writer.write_epub(epub, output_path)         → ZIP with mimetype-first STORED
+9. exit 0
 ```
+
+### 5.1a Target language resolution (US-009)
+
+Both EPUB OPF `<dc:language>` and HTML5 `<html lang>` use BCP 47 / RFC
+5646 as the tag grammar (EPUB Packages §5.6.3; HTML Living Standard).
+The resolver passes values through verbatim — no region stripping, no
+case folding — because both surfaces share the same spec and any
+transformation would lose information without value.
+
+```
+explicit = args.lang                          # may be None
+detected = doc.html_lang                      # trimmed; None if missing/empty
+source   = epub.metadata.language
+
+if explicit is not None:
+    if not is_well_formed(explicit):
+        raise UserError("--lang value … is not a well-formed BCP 47 tag")
+    target = explicit
+    if detected and detected != explicit:
+        WARN("--lang overrides target language detected in translated HTML")
+elif detected is not None:
+    if not is_well_formed(detected):
+        raise UserError("<html lang=…> is not well-formed; pass --lang explicitly")
+    target = detected
+    INFO("Auto-detected target language … from translated HTML")
+else:
+    raise UserError("pass --lang CODE explicitly")
+
+# Informational drift detection — never fails.
+if source and primary_subtag(source) == primary_subtag(target):
+    WARN("primary subtag matches source; verify translation actually happened")
+```
+
+`is_well_formed` and `primary_subtag` live in `epub/_bcp47.py`. The
+well-formedness regex (`^[A-Za-z]{1,8}(-[A-Za-z0-9]{1,8})*$`) covers
+the BCP 47 grammar without consulting the IANA Language Subtag Registry,
+matching epubcheck's posture (well-formedness > strict registry lookup).
 
 ### 5.2 `parser.parse_translated_html`
 

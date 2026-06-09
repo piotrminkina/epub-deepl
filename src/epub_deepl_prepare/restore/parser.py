@@ -33,6 +33,11 @@ class TranslatedDoc:
     ncx_doctitle: str = ""
     nav_labels: dict[str, str] = field(default_factory=dict)  # data-ncx-id → label
     sections: dict[str, str] = field(default_factory=dict)  # data-source-href → body HTML
+    #: Raw ``<html lang="...">`` value, trimmed. ``None`` if the root
+    #: element has no ``lang`` attribute or the value is empty after
+    #: whitespace trim. Used by ``cli`` to auto-detect the target
+    #: language without an explicit ``--lang`` flag.
+    html_lang: str | None = None
 
 
 def parse_translated_html(html_path: str) -> TranslatedDoc:
@@ -61,6 +66,17 @@ def parse_translated_html_bytes(data: bytes) -> TranslatedDoc:
     restore_svg_attribute_case(tree)
 
     doc = TranslatedDoc()
+
+    # Extract <html lang="..."> (root attribute). EPUB Packages §5.6.3
+    # mandates trimming leading/trailing whitespace before processing
+    # language tag values; we apply the same rule here. Empty after
+    # trim → leave as None so the CLI knows auto-detect failed and can
+    # require --lang explicitly.
+    raw_lang = tree.get("lang") or tree.get("{http://www.w3.org/XML/1998/namespace}lang")
+    if raw_lang:
+        trimmed = raw_lang.strip()
+        if trimmed:
+            doc.html_lang = trimmed
 
     # --- OPF metadata block ---
     meta_header = tree.find(".//header[@data-source='opf-metadata']")

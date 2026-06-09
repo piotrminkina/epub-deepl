@@ -51,9 +51,15 @@ epub-deepl-prepare prepare path/to/book.epub
 #    choose target language, download the translated HTML.
 
 # 3. Reassemble the translated EPUB
-epub-deepl-prepare restore path/to/book.epub path/to/book.translated.html --lang pl
+epub-deepl-prepare restore path/to/book.epub path/to/book.translated.html
 #   → produces path/to/book.translated.epub
 ```
+
+The target language is auto-detected from the translated HTML's
+`<html lang>` attribute (DeepL sets it correctly). Pass
+`--lang <code>` to override the detection — useful when the
+translator left the source language tag in place or when you want a
+specific BCP 47 variant (e.g. `--lang pt-BR`).
 
 The original EPUB is read-only during `restore` and acts as the structural
 template; only translated body content, OPF metadata (`dc:title`,
@@ -83,7 +89,7 @@ The wrapper fails fast with a diagnostic if the virtualenv is missing.
 | Command | Description |
 |---|---|
 | `epub-deepl-prepare prepare <input.epub>` | Validate input and emit `<stem>.prepare.html` |
-| `epub-deepl-prepare restore <input.epub> <translated.html> --lang <code>` | Validate translated HTML against the input EPUB and emit `<stem>.translated.epub` |
+| `epub-deepl-prepare restore <input.epub> <translated.html> [--lang <code>]` | Validate translated HTML against the input EPUB and emit `<stem>.translated.epub`. `--lang` is optional (auto-detected from `<html lang>`). |
 | `epub-deepl-prepare --help` | Top-level usage |
 | `<subcommand> --help` | Flags for a specific subcommand |
 

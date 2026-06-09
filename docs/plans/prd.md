@@ -114,9 +114,10 @@ to the reader.
 ### FR-3: CLI surface
 
 - `epub-deepl-prepare prepare <input.epub> [--output FILE] [--force]`
-- `epub-deepl-prepare restore <input.epub> <translated.html> --lang <code> [--output FILE] [--force]`
-- `--lang` accepts a BCP 47 / ISO 639-1 language code (e.g. `pl`, `en`,
-  `de`, `pt-BR`).
+- `epub-deepl-prepare restore <input.epub> <translated.html> [--lang <code>] [--output FILE] [--force]`
+- `--lang` accepts a BCP 47 tag (e.g. `pl`, `en`, `de`, `pt-BR`). It is
+  optional; auto-detected from the translated HTML's `<html lang>` when
+  omitted. See US-009 for the full resolution order.
 - `--force` overwrites existing output files; without it, an existing
   output causes a fail-fast exit.
 - Exit codes:
@@ -313,16 +314,38 @@ content.
   `<h3>` (whichever appears first in document order) in the referenced
   file.
 
-### US-009: Target language declared in OPF
+### US-009: Target language resolution and OPF declaration
 
-**Description:** As the user, I want my e-reader and any post-processing
-tool to know the book's language.
+**Description:** As the user, I want the tool to figure out the target
+language automatically when DeepL has already declared it in the
+translated HTML, and to accept an explicit override when I need one.
+Both EPUB OPF `<dc:language>` and HTML5 `<html lang>` use the same
+syntax (BCP 47 / RFC 5646), so values pass through verbatim without
+normalisation.
 
 **Acceptance criteria:**
 
-- The output OPF `<dc:language>` equals the value passed to `--lang`.
-- If the input has multiple `<dc:language>` elements, only the first is
-  updated; subsequent ones are removed.
+- `--lang` is optional. Resolution order:
+  1. `--lang CODE` (when provided) — force; emits `[WARN]` if it
+     differs from `<html lang>` detected in the translated HTML.
+  2. `<html lang="…">` from the translated HTML's root element, after
+     leading/trailing whitespace is trimmed (EPUB Packages §5.6.3
+     mandates this trim).
+  3. Otherwise `UserError`: stderr line containing `--lang`, exit 1.
+- The chosen value is validated as well-formed BCP 47 (regex
+  `^[A-Za-z]{1,8}(-[A-Za-z0-9]{1,8})*$`). Not well-formed → `UserError`
+  with diagnostic. Strict registry-lookup validation is intentionally
+  out of scope (matches epubcheck's posture).
+- The chosen value is written verbatim to OPF `<dc:language>`. No
+  region stripping, no case folding. `pl-PL` stays `pl-PL`; `pl`
+  stays `pl`.
+- If the input EPUB has multiple `<dc:language>` elements, only the
+  first is updated; subsequent ones are removed.
+- Drift warning (informational, does not fail): if the chosen target's
+  **primary subtag** (case-insensitive) matches the source EPUB's
+  primary subtag, emit `[WARN]` naming both values — possible
+  indication that translation did not actually run (e.g. user uploaded
+  to DeepL but downloaded the original).
 
 ### US-010: Non-translated metadata preserved structurally
 
