@@ -126,3 +126,29 @@ def test_count_ruby_elements_counts_correctly() -> None:
         b"</body></html>"
     )
     assert count_ruby_elements(xhtml) == 2
+
+
+def test_replace_body_preserves_non_ascii_utf8() -> None:
+    """Regression: lxml HTML parser without an encoding hint defaults to
+    Latin-1 in libxml2's HTML4 mode. Body fragments wrapped in a bare
+    <div>...</div> have no <meta charset>, so non-ASCII UTF-8 input
+    (e.g. Polish ``ż``, ``ę``, ``ó``) was previously mojibake-encoded
+    on output. The fix sets ``encoding="utf-8"`` on the safe HTMLParser
+    factory; this test pins the behaviour.
+    """
+    from epub_deepl_prepare.epub.xhtml import replace_body_content
+
+    orig = (
+        b"<?xml version='1.0' encoding='UTF-8'?>\n"
+        b"<html xmlns='http://www.w3.org/1999/xhtml'>"
+        b"<head><title>t</title></head><body><p>placeholder</p></body></html>"
+    )
+    polish = "Poniższa książka zawiera tekst zaszyfrowany ąęóźż."
+    result = replace_body_content(orig, f"<p>{polish}</p>")
+
+    assert polish.encode("utf-8") in result, (
+        f"Expected UTF-8 bytes of {polish!r} in output; got mojibake."
+    )
+    # And explicitly: the mojibake form must NOT appear.
+    mojibake = polish.encode("utf-8").decode("latin-1").encode("utf-8")
+    assert mojibake not in result, "Mojibake (UTF-8 → Latin-1 → UTF-8) leaked through."

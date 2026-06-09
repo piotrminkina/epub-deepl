@@ -46,8 +46,18 @@ def html_parser() -> html.HtmlMixin:
     HTML5 parsers use a tag-soup algorithm that never loads external entities or
     DTDs, so these security flags are redundant; huge_tree is the only relevant
     guard to keep.
+
+    ``encoding="utf-8"`` is the **fallback** charset libxml2 uses when
+    the parsed bytes carry no encoding declaration (no XML decl, no
+    ``<meta charset>``, no BOM). Without it, libxml2's HTML mode
+    defaults to ISO-8859-1 (HTML4 historical default), producing
+    mojibake for any non-ASCII input that lacks a charset hint —
+    notably the body fragments we wrap in a bare ``<div>...</div>``
+    inside ``epub/xhtml.py::replace_body_content``. Documents that DO
+    declare their own charset (via ``<meta charset>`` etc.) override
+    this fallback — that is the libxml2 contract.
     """
-    return html.HTMLParser(huge_tree=False)  # type: ignore[return-value]
+    return html.HTMLParser(huge_tree=False, encoding="utf-8")  # type: ignore[return-value]
 
 
 def parse_xml(data: bytes) -> etree._Element:
