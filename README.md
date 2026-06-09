@@ -222,8 +222,7 @@ docs/plans/
 
 ## License
 
-Not specified in the project files. If you intend to publish, add a
-`LICENSE` file at the repository root and update this section.
+MIT — see [LICENSE](LICENSE).
 
 ---
 
