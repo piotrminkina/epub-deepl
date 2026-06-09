@@ -18,9 +18,9 @@ from dataclasses import dataclass, field
 
 from lxml import etree
 
-from epub_translation_prepare.epub._safe_parser import parse_html_document
-from epub_translation_prepare.epub._svg_case import restore_svg_attribute_case
-from epub_translation_prepare.errors import UserError
+from epub_deepl_prepare.epub._safe_parser import parse_html_document
+from epub_deepl_prepare.epub._svg_case import restore_svg_attribute_case
+from epub_deepl_prepare.errors import UserError
 
 
 @dataclass

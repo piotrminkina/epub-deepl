@@ -22,10 +22,10 @@ from tests.fixtures.minimal import NavPointSpec, XhtmlSpec, build_minimal_epub
 
 def _roundtrip(epub_bytes: bytes, target_lang: str = "en") -> bytes:
     """Run prepare + restore on in-memory bytes. Returns output EPUB bytes."""
-    from epub_translation_prepare.epub.reader import read_epub_bytes
-    from epub_translation_prepare.merge.builder import build
-    from epub_translation_prepare.restore.applier import apply_and_write_bytes
-    from epub_translation_prepare.restore.parser import parse_translated_html_bytes
+    from epub_deepl_prepare.epub.reader import read_epub_bytes
+    from epub_deepl_prepare.merge.builder import build
+    from epub_deepl_prepare.restore.applier import apply_and_write_bytes
+    from epub_deepl_prepare.restore.parser import parse_translated_html_bytes
 
     epub = read_epub_bytes(epub_bytes)
     if not epub.metadata.language:
@@ -199,8 +199,8 @@ def test_roundtrip_without_translation_synth_with_mathml() -> None:
 @pytest.mark.integration
 def test_mathml_receives_translate_no_in_prepare() -> None:
     """prepare adds translate='no' to all MathML elements (US-011)."""
-    from epub_translation_prepare.epub.reader import read_epub_bytes
-    from epub_translation_prepare.merge.builder import build
+    from epub_deepl_prepare.epub.reader import read_epub_bytes
+    from epub_deepl_prepare.merge.builder import build
 
     math_body = (
         '<math xmlns="http://www.w3.org/1998/Math/MathML">'
@@ -230,7 +230,7 @@ def test_roundtrip_without_translation_synth_with_ruby() -> None:
 @pytest.mark.integration
 def test_restored_opf_dc_language_set_to_target() -> None:
     """Restored EPUB has dc:language equal to --lang value (US-009)."""
-    from epub_translation_prepare.epub.opf import parse_metadata
+    from epub_deepl_prepare.epub.opf import parse_metadata
 
     epub_bytes = build_minimal_epub(language="en")
     output = _roundtrip(epub_bytes, target_lang="pl")
@@ -243,8 +243,8 @@ def test_restored_opf_dc_language_set_to_target() -> None:
 @pytest.mark.integration
 def test_restored_opf_language_und_fallback_when_missing() -> None:
     """I-1 / US-019: prepare handles missing dc:language → 'und'."""
-    from epub_translation_prepare.epub.reader import read_epub_bytes
-    from epub_translation_prepare.merge.builder import build
+    from epub_deepl_prepare.epub.reader import read_epub_bytes
+    from epub_deepl_prepare.merge.builder import build
 
     epub_bytes = build_minimal_epub(language="")
     epub = read_epub_bytes(epub_bytes)
@@ -325,7 +325,7 @@ def test_input_equals_output_path_rejected_prepare(
     import io
     import sys
 
-    from epub_translation_prepare.cli import main
+    from epub_deepl_prepare.cli import main
 
     stderr = io.StringIO()
     with contextlib.redirect_stderr(stderr):
@@ -342,7 +342,7 @@ def test_input_equals_output_path_force_does_not_bypass(
     import contextlib
     import io
 
-    from epub_translation_prepare.cli import main
+    from epub_deepl_prepare.cli import main
 
     stderr = io.StringIO()
     with contextlib.redirect_stderr(stderr):
@@ -355,9 +355,9 @@ def test_input_equals_output_path_force_does_not_bypass(
 @pytest.mark.integration
 def test_non_xhtml_spine_item_rejected(tmp_path: pathlib.Path) -> None:
     """US-020: non-XHTML spine item causes exit 1."""
-    from epub_translation_prepare.epub.reader import read_epub_bytes
-    from epub_translation_prepare.epub.validator import validate_epub
-    from epub_translation_prepare.errors import UnsupportedMediaType
+    from epub_deepl_prepare.epub.reader import read_epub_bytes
+    from epub_deepl_prepare.epub.validator import validate_epub
+    from epub_deepl_prepare.errors import UnsupportedMediaType
 
     epub = read_epub_bytes(build_minimal_epub())
     # Change first spine item's media-type
@@ -370,11 +370,11 @@ def test_non_xhtml_spine_item_rejected(tmp_path: pathlib.Path) -> None:
 @pytest.mark.integration
 def test_adversarial_translation_strips_data_attribute_surfaces_precise_error() -> None:
     """SM-7 / C-4: stripping data-source-href causes precise TranslatedHtmlMismatch."""
-    from epub_translation_prepare.epub.reader import read_epub_bytes
-    from epub_translation_prepare.errors import TranslatedHtmlMismatch
-    from epub_translation_prepare.merge.builder import build
-    from epub_translation_prepare.restore.applier import apply_and_write_bytes
-    from epub_translation_prepare.restore.parser import parse_translated_html_bytes
+    from epub_deepl_prepare.epub.reader import read_epub_bytes
+    from epub_deepl_prepare.errors import TranslatedHtmlMismatch
+    from epub_deepl_prepare.merge.builder import build
+    from epub_deepl_prepare.restore.applier import apply_and_write_bytes
+    from epub_deepl_prepare.restore.parser import parse_translated_html_bytes
 
     epub_bytes = build_minimal_epub()
     epub = read_epub_bytes(epub_bytes)
@@ -393,10 +393,10 @@ def test_adversarial_translation_strips_data_attribute_surfaces_precise_error() 
 @pytest.mark.integration
 def test_adversarial_translation_attribute_reorder_still_succeeds() -> None:
     """SM-7 / C-4: attribute reordering does not break restore."""
-    from epub_translation_prepare.epub.reader import read_epub_bytes
-    from epub_translation_prepare.merge.builder import build
-    from epub_translation_prepare.restore.applier import apply_and_write_bytes
-    from epub_translation_prepare.restore.parser import parse_translated_html_bytes
+    from epub_deepl_prepare.epub.reader import read_epub_bytes
+    from epub_deepl_prepare.merge.builder import build
+    from epub_deepl_prepare.restore.applier import apply_and_write_bytes
+    from epub_deepl_prepare.restore.parser import parse_translated_html_bytes
 
     epub_bytes = build_minimal_epub()
     epub = read_epub_bytes(epub_bytes)
@@ -424,11 +424,11 @@ def test_adversarial_translation_attribute_reorder_still_succeeds() -> None:
 @pytest.mark.integration
 def test_adversarial_translation_random_seeded_combinations() -> None:
     """SM-7: adversarial transform either succeeds or fails with precise error."""
-    from epub_translation_prepare.epub.reader import read_epub_bytes
-    from epub_translation_prepare.errors import TranslatedHtmlMismatch
-    from epub_translation_prepare.merge.builder import build
-    from epub_translation_prepare.restore.applier import apply_and_write_bytes
-    from epub_translation_prepare.restore.parser import parse_translated_html_bytes
+    from epub_deepl_prepare.epub.reader import read_epub_bytes
+    from epub_deepl_prepare.errors import TranslatedHtmlMismatch
+    from epub_deepl_prepare.merge.builder import build
+    from epub_deepl_prepare.restore.applier import apply_and_write_bytes
+    from epub_deepl_prepare.restore.parser import parse_translated_html_bytes
 
     epub_bytes = build_minimal_epub()
 
@@ -453,11 +453,11 @@ def test_adversarial_translation_random_seeded_combinations() -> None:
 @pytest.mark.integration
 def test_simulated_translation_completeness() -> None:
     """Simulated translation touches every expected field (SM-2 proxy)."""
-    from epub_translation_prepare.epub.opf import parse_metadata
-    from epub_translation_prepare.epub.reader import read_epub_bytes
-    from epub_translation_prepare.merge.builder import build
-    from epub_translation_prepare.restore.applier import apply_and_write_bytes
-    from epub_translation_prepare.restore.parser import parse_translated_html_bytes
+    from epub_deepl_prepare.epub.opf import parse_metadata
+    from epub_deepl_prepare.epub.reader import read_epub_bytes
+    from epub_deepl_prepare.merge.builder import build
+    from epub_deepl_prepare.restore.applier import apply_and_write_bytes
+    from epub_deepl_prepare.restore.parser import parse_translated_html_bytes
 
     epub_bytes = build_minimal_epub(titles=("The Book",), descriptions=("The Desc",))
     epub = read_epub_bytes(epub_bytes)
@@ -491,7 +491,7 @@ def test_roundtrip_without_translation_is_content_identical(
     with open(corpus_epub, "rb") as f:
         epub_bytes = f.read()
 
-    from epub_translation_prepare.epub.reader import read_epub_bytes
+    from epub_deepl_prepare.epub.reader import read_epub_bytes
 
     try:
         epub = read_epub_bytes(epub_bytes)
@@ -529,7 +529,7 @@ def test_zip_packaging_invariants_hold_after_roundtrip(
     with open(corpus_epub, "rb") as f:
         epub_bytes = f.read()
 
-    from epub_translation_prepare.epub.reader import read_epub_bytes
+    from epub_deepl_prepare.epub.reader import read_epub_bytes
 
     try:
         epub = read_epub_bytes(epub_bytes)
@@ -554,7 +554,7 @@ def test_cli_turnaround_per_book(
     import contextlib
     import io
 
-    from epub_translation_prepare.cli import main
+    from epub_deepl_prepare.cli import main
 
     stderr = io.StringIO()
     with contextlib.redirect_stderr(stderr):

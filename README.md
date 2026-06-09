@@ -1,4 +1,4 @@
-# epub-translation-prepare
+# EPUB DeepL Prepare
 
 A Python CLI that bundles all human-facing content of an EPUB into **a single
 HTML document** suitable for DeepL's document-translation feature, then
@@ -47,10 +47,10 @@ or equivalents.
 ### Installation — Dev Container (recommended)
 
 ```bash
-git clone <your-fork> epub-translation-prepare
-cd epub-translation-prepare
+git clone <your-fork> epub-deepl-prepare
+cd epub-deepl-prepare
 devcontainer up --workspace-folder .
-devcontainer exec --workspace-folder . bash -lc 'source .venv/bin/activate && epub-translation-prepare --help'
+devcontainer exec --workspace-folder . bash -lc 'source .venv/bin/activate && epub-deepl-prepare --help'
 ```
 
 First `devcontainer up` builds the Debian-based image, installs the
@@ -65,12 +65,12 @@ edit `mounts` in `.devcontainer/devcontainer.json`.
 ### Installation — native
 
 ```bash
-git clone <your-fork> epub-translation-prepare
-cd epub-translation-prepare
+git clone <your-fork> epub-deepl-prepare
+cd epub-deepl-prepare
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
-epub-translation-prepare --help
+epub-deepl-prepare --help
 ```
 
 ### Running
@@ -80,31 +80,31 @@ upload / download step.
 
 ```bash
 # 1. Bundle the EPUB into a single HTML for DeepL
-epub-translation-prepare prepare path/to/book.epub
+epub-deepl-prepare prepare path/to/book.epub
 #   → produces path/to/book.prepare.html
 
 # 2. Upload book.prepare.html to https://www.deepl.com/translator/files,
 #    choose target language, download the translated HTML.
 
 # 3. Reassemble the translated EPUB
-epub-translation-prepare restore path/to/book.epub path/to/book.translated.html --lang pl
+epub-deepl-prepare restore path/to/book.epub path/to/book.translated.html --lang pl
 #   → produces path/to/book.translated.epub
 ```
 
 #### `bin/` launcher (no venv activation)
 
-`bin/epub-translation-prepare` is a thin Bash wrapper that locates the
+`bin/epub-deepl-prepare` is a thin Bash wrapper that locates the
 project's `.venv` interpreter directly. Use it when you want to invoke the
 tool from outside the activated virtualenv (e.g. from a shell alias, a cron
 job, or your editor's external-tool integration):
 
 ```bash
 # Run from any directory
-/path/to/repo/bin/epub-translation-prepare prepare book.epub
+/path/to/repo/bin/epub-deepl-prepare prepare book.epub
 
 # Or place on PATH
-ln -s "$(pwd)/bin/epub-translation-prepare" ~/.local/bin/
-epub-translation-prepare prepare book.epub
+ln -s "$(pwd)/bin/epub-deepl-prepare" ~/.local/bin/
+epub-deepl-prepare prepare book.epub
 ```
 
 The wrapper self-locates via `${BASH_SOURCE[0]}` and execs
@@ -120,9 +120,9 @@ are mutated.
 
 | Command | Description |
 |---|---|
-| `epub-translation-prepare prepare <input.epub>` | Validate input EPUB and emit `<stem>.prepare.html` |
-| `epub-translation-prepare restore <input.epub> <translated.html> --lang <code>` | Validate translated HTML against the input EPUB and emit `<stem>.translated.epub` |
-| `epub-translation-prepare --help` | Show top-level usage |
+| `epub-deepl-prepare prepare <input.epub>` | Validate input EPUB and emit `<stem>.prepare.html` |
+| `epub-deepl-prepare restore <input.epub> <translated.html> --lang <code>` | Validate translated HTML against the input EPUB and emit `<stem>.translated.epub` |
+| `epub-deepl-prepare --help` | Show top-level usage |
 | `<subcommand> --help` | Show flags for a specific subcommand |
 
 Common flags on both subcommands:

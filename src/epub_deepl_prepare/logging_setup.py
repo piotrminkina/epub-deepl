@@ -33,7 +33,7 @@ def configure(verbose: bool = False) -> None:
 
     After this call, use `logging.getLogger(__name__)` in each module.
     """
-    root = logging.getLogger("epub_translation_prepare")
+    root = logging.getLogger("epub_deepl_prepare")
     root.handlers.clear()
 
     handler = _StderrHandler()
@@ -47,4 +47,4 @@ def configure(verbose: bool = False) -> None:
 
 def get_logger(name: str) -> logging.Logger:
     """Return a child logger under the tool's namespace."""
-    return logging.getLogger(f"epub_translation_prepare.{name}")
+    return logging.getLogger(f"epub_deepl_prepare.{name}")

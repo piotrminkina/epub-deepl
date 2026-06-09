@@ -14,9 +14,9 @@ from urllib.parse import unquote, urljoin
 
 from lxml import etree
 
-from epub_translation_prepare.epub._safe_parser import parse_html_document, parse_xml
-from epub_translation_prepare.epub.model import Epub, NavPoint, Ncx
-from epub_translation_prepare.errors import InternalError, MissingNcx
+from epub_deepl_prepare.epub._safe_parser import parse_html_document, parse_xml
+from epub_deepl_prepare.epub.model import Epub, NavPoint, Ncx
+from epub_deepl_prepare.errors import InternalError, MissingNcx
 
 _NCX_NS = "http://www.daisy.org/z3986/2005/ncx/"
 _NCX = f"{{{_NCX_NS}}}"

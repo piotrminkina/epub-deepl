@@ -9,11 +9,11 @@ from __future__ import annotations
 
 from lxml import etree
 
-from epub_translation_prepare.epub._safe_parser import (
+from epub_deepl_prepare.epub._safe_parser import (
     parse_html_document,
     parse_xml_recover,
 )
-from epub_translation_prepare.epub._svg_case import restore_svg_attribute_case
+from epub_deepl_prepare.epub._svg_case import restore_svg_attribute_case
 
 _MATHML_NS = "http://www.w3.org/1998/Math/MathML"
 

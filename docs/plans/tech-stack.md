@@ -1,4 +1,4 @@
-# Technology Stack — epub-translation-prepare
+# Technology Stack — epub-deepl-prepare
 
 **Status:** Approved
 **Related:** `prd.md` (requirements), `tech-spec.md` (TBD — internal architecture)

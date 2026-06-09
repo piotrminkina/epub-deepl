@@ -18,9 +18,9 @@ from typing import TYPE_CHECKING
 
 from lxml import etree
 
-from epub_translation_prepare.epub._safe_parser import parse_xml
-from epub_translation_prepare.epub.model import ManifestItem, OpfMetadata, Spine, SpineRef
-from epub_translation_prepare.errors import NotAnEpub
+from epub_deepl_prepare.epub._safe_parser import parse_xml
+from epub_deepl_prepare.epub.model import ManifestItem, OpfMetadata, Spine, SpineRef
+from epub_deepl_prepare.errors import NotAnEpub
 
 if TYPE_CHECKING:
     pass

@@ -1,4 +1,4 @@
-# Test Plan — epub-translation-prepare
+# Test Plan — epub-deepl-prepare
 
 **Status:** Draft v1
 **Related:** `prd.md` (US-001…US-017, SM-1…SM-6), `tech-stack.md`, `tech-spec.md`

@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/devcontainers/spec/main/schemas/devContainer.base.schema.json",
-  "name": "epub-translation-prepare",
+  "name": "epub-deepl-prepare",
 
   "build": {
     "dockerfile": "Dockerfile"

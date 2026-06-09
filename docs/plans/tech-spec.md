@@ -1,4 +1,4 @@
-# Technical Specification — epub-translation-prepare
+# Technical Specification — epub-deepl-prepare
 
 **Status:** Draft v1
 **Related:** `prd.md` (requirements), `tech-stack.md` (technology choices)
@@ -25,7 +25,7 @@ external state file is generated or required.
 ## 2. Package Layout
 
 ```
-epub-translation-prepare/
+epub-deepl-prepare/
 ├── pyproject.toml
 ├── README.md
 ├── docs/plans/
