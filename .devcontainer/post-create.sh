@@ -13,8 +13,8 @@
 
 set -euo pipefail
 
-WORKSPACE="${PWD}"
-VENV_DIR="${WORKSPACE}/.venv"
+readonly WORKSPACE="${PWD}"
+readonly VENV_DIR="${WORKSPACE}/.venv"
 
 echo "[post-create] workspace = ${WORKSPACE}"
 echo "[post-create] python    = $(python3 --version)"

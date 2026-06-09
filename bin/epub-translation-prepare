@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+#
+# epub-translation-prepare — CLI launcher using the project virtualenv directly.
+#
+# Resolves the project root from this script's own path, locates the
+# ``.venv/bin/python`` interpreter, and execs the CLI module. Works from any
+# working directory and does NOT require the caller to ``source .venv/bin/activate``
+# first. Suitable for placement on PATH (symlink into ~/.local/bin), or for
+# invocation as ./bin/epub-translation-prepare from a checkout.
+#
+# Usage:
+#     bin/epub-translation-prepare [GLOBAL_OPTIONS] <prepare|restore> [ARGS]
+#     bin/epub-translation-prepare --help
+#
+# Exit codes:
+#     0  success (forwarded from the Python CLI)
+#     1  user error (forwarded; or .venv missing)
+#     2  internal error (forwarded)
+#
+
+set -euo pipefail
+
+# --- Constants ---------------------------------------------------------------
+readonly SCRIPT_NAME="${0##*/}"
+
+# --- Functions ---------------------------------------------------------------
+
+function die() {
+    printf '%s: error: %s\n' "${SCRIPT_NAME}" "$*" >&2
+    exit 1
+}
+
+function project_root() {
+    local source_path
+    source_path="$(readlink -f -- "${BASH_SOURCE[0]}")"
+    dirname -- "$(dirname -- "${source_path}")"
+}
+
+function main() {
+    local root
+    root="$(project_root)"
+    local python_bin="${root}/.venv/bin/python"
+
+    if [[ ! -x "${python_bin}" ]]; then
+        die "virtualenv not found at ${root}/.venv (run 'devcontainer up' or 'python -m venv .venv && pip install -e .[dev]')"
+    fi
+
+    exec "${python_bin}" -m epub_translation_prepare "$@"
+}
+
+# --- Entry point -------------------------------------------------------------
+main "$@"

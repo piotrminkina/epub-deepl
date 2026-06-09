@@ -91,6 +91,26 @@ epub-translation-prepare restore path/to/book.epub path/to/book.translated.html 
 #   → produces path/to/book.translated.epub
 ```
 
+#### `bin/` launcher (no venv activation)
+
+`bin/epub-translation-prepare` is a thin Bash wrapper that locates the
+project's `.venv` interpreter directly. Use it when you want to invoke the
+tool from outside the activated virtualenv (e.g. from a shell alias, a cron
+job, or your editor's external-tool integration):
+
+```bash
+# Run from any directory
+/path/to/repo/bin/epub-translation-prepare prepare book.epub
+
+# Or place on PATH
+ln -s "$(pwd)/bin/epub-translation-prepare" ~/.local/bin/
+epub-translation-prepare prepare book.epub
+```
+
+The wrapper self-locates via `${BASH_SOURCE[0]}` and execs
+`.venv/bin/python -m epub_translation_prepare`. It fails fast with a
+diagnostic if the virtualenv is missing.
+
 The original EPUB is read-only during `restore` and acts as the structural
 template; only translated body content, OPF metadata (`dc:title`,
 `dc:description`, `dc:subject`, `dc:language`), and NCX navigation labels
