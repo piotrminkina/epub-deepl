@@ -54,12 +54,18 @@ RUN ln -sf /usr/bin/python3 /usr/local/bin/python \
 # ---------------------------------------------------------------------------
 # Layer 2 — epubcheck for manual EPUB validation (SM-4 from the PRD).
 # Installed system-wide so any user can invoke it via `epubcheck <file.epub>`.
-# Version pinned; bump in lockstep with bookworm's default-jre-headless.
+# Version + SHA256 pinned together — bump both whenever upgrading.
+# Verification protects against supply-chain compromise: GitHub releases are
+# HTTPS-authenticated, but the asset bytes are not signed by W3C, so we hash-
+# pin to detect any future swap. The hash was computed from the official
+# release at https://github.com/w3c/epubcheck/releases/tag/v5.1.0.
 # ---------------------------------------------------------------------------
 ARG EPUBCHECK_VERSION=5.1.0
+ARG EPUBCHECK_SHA256=74a59af8602bf59b1d04266a450d9cdcb5986e36d825adc403cde0d95e88c9e8
 RUN curl -fsSL \
       "https://github.com/w3c/epubcheck/releases/download/v${EPUBCHECK_VERSION}/epubcheck-${EPUBCHECK_VERSION}.zip" \
       -o /tmp/epubcheck.zip \
+ && printf '%s  /tmp/epubcheck.zip\n' "${EPUBCHECK_SHA256}" | sha256sum -c - \
  && unzip -q /tmp/epubcheck.zip -d /opt \
  && ln -sfn "/opt/epubcheck-${EPUBCHECK_VERSION}" /opt/epubcheck \
  && rm /tmp/epubcheck.zip \
