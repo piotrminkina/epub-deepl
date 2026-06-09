@@ -1,0 +1,51 @@
+{
+  "$schema": "https://raw.githubusercontent.com/devcontainers/spec/main/schemas/devContainer.base.schema.json",
+  "name": "epub-translation-prepare",
+
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "username": "devcontainer",
+      "userUid": "automatic",
+      "userGid": "automatic",
+      "installZsh": true,
+      "configureZshAsDefaultShell": true,
+      "installOhMyZsh": true,
+      "installOhMyZshConfig": true,
+      "upgradePackages": false
+    }
+  },
+
+  "containerUser": "devcontainer",
+  "remoteUser": "devcontainer",
+
+  "workspaceFolder": "${localWorkspaceFolder}",
+  "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind,consistency=cached",
+
+  "mounts": [
+    "source=/tmp/nowe,target=/tmp/nowe,type=bind,readonly"
+  ],
+
+  "remoteEnv": {
+    "VIRTUAL_ENV": "${localWorkspaceFolder}/.venv",
+    "PATH": "${localWorkspaceFolder}/.venv/bin:${containerEnv:PATH}",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONUNBUFFERED": "1"
+  },
+
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+
+  "customizations": {
+    "jetbrains": {
+      "backend": "PyCharm",
+      "plugins": [
+        "PythonCore",
+        "org.toml.lang",
+        "Docker"
+      ]
+    }
+  }
+}
