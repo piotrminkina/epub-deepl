@@ -461,3 +461,73 @@ should be:
 
 Everything else can be deferred without compromising release-readiness.
 These four cannot.
+
+---
+
+## Retrospective: what this review did NOT predict
+
+*Added 2026-06-10, after the first real DeepL translation.*
+
+The 4 critical and 17 important findings above are accurate, and all
+were folded into the planning documents and code before the first
+real-world run. The MVP shipped without any of them lurking.
+
+**But two bug classes emerged in real-world usage that this review did
+not anticipate:**
+
+### C-5: SVG/MathML attribute case lowercased by HTML4 parsers
+
+`lxml.html` (libxml2 HTML4 mode) and DeepL's translation pipeline
+both normalise attribute names to lowercase. The SVG specification
+requires `viewBox`, `preserveAspectRatio`, etc. in camelCase, and
+`epubcheck` rejects lowercased variants. Books with embedded SVG
+cover pages (which is many) fail validation after round-trip.
+
+This was missed because the test corpus's embedded SVG was minimal
+and the suite never invoked `epubcheck` automatically. Documented in
+[lessons-learned G-3](lessons-learned.md#g-3-deepl-lowercases-svgmathml-camelcase-attributes).
+
+### UTF-8 mojibake in body fragments
+
+When wrapping a body fragment as `<div>...</div>` for re-parsing,
+`lxml.html.HTMLParser` defaults to ISO-8859-1 (HTML4 historical
+default) for any input without a charset declaration. Polish UTF-8
+bytes were re-interpreted as Latin-1, then re-encoded as UTF-8 on
+output — double-encoding mojibake throughout chapter bodies and
+(via anchor resolution) the NCX navLabels.
+
+This was missed because the entire test corpus, including synthetic
+fixtures, was ASCII-only. The bug had been latent since the initial
+implementation. Documented in
+[lessons-learned G-1](lessons-learned.md#g-1-lxmlhtmlhtmlparser-defaults-to-latin-1)
+and [ADR-0003](../adr/0003-centralized-parser-factory.md).
+
+### Why these went unseen
+
+| Pattern | Predicted in review? | Missed because… |
+|---|---|---|
+| ZIP-level invariants ignored | Yes (C-1) | — |
+| Byte-level preservation unbuildable | Yes (C-2) | — |
+| Anchor-resolution path bug | Yes (C-3) | — |
+| R-8 (DeepL strips data-*) | Yes (C-4) | Did not happen in real DeepL |
+| SVG attribute case | No | Synthetic SVG minimal; no automated epubcheck |
+| UTF-8 mojibake | No | Corpus ASCII-only; no non-Latin fixture |
+
+The bugs we missed share a property: they only manifest on **real
+external system output** combined with **real content**. No
+self-contained reasoning about the code could have predicted them
+without explicit non-ASCII fixtures or an automated `epubcheck` gate.
+
+### Lessons for next review cycle
+
+1. Synthetic fixtures must include **non-ASCII** content as a matter
+   of policy. Added as test plan policy in
+   [lessons-learned P-2](lessons-learned.md#p-2-test-corpus-monoculture-is-a-real-risk).
+2. `epubcheck` should be invoked at least once per release on the
+   full corpus, manually. Encoded as a release gate in
+   `CONTRIBUTING.md`.
+3. Devils-advocate is a **necessary but not sufficient** discipline.
+   The unknown-unknowns section (UU-1..UU-8) tries to surface this,
+   but by definition it cannot enumerate the unknown-unknowns
+   themselves. Real-world spike runs (S-1, S-2 in tech-stack) are
+   the complement.
