@@ -1,0 +1,24 @@
+# Dependabot keeps third-party action versions current so the CI workflow
+# does not silently rot. We do NOT enable pip ecosystem updates here:
+#
+# - lxml is the only runtime dependency; it is intentionally pinned to a
+#   floor (>=5.0) but not to a ceiling, so pip resolves the current
+#   minor at install time. Dependabot PRs would add no signal.
+# - Dev dependencies (ruff / mypy / pytest / hatch) move fast and the
+#   noise-to-value ratio of a weekly bump PR is low for a solo MVP.
+#
+# Revisit if the project grows multi-contributor: at that point automating
+# pip bumps becomes worth the review surface.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - ci
+    commit-message:
+      prefix: "ci"
+      include: scope

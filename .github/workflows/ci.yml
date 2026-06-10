@@ -13,6 +13,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Least-privilege default for the GITHUB_TOKEN: read-only on repo contents
+# is all CI needs (no comment posting, no release, no deploy). Individual
+# jobs may opt-in to wider scopes if needed in the future.
+permissions:
+  contents: read
+
 jobs:
   # ---------------------------------------------------------------------------
   # Lint, type-check, fast tests across the supported Python minors.
@@ -22,6 +28,10 @@ jobs:
   quality:
     name: quality (python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    # Generous bound — local suite runs in ~60s; CI overhead + apt-get +
+    # cold pip cache pushes a healthy run to ~3 minutes. 15 catches a
+    # genuine hang without ever firing on a healthy build.
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -65,6 +75,9 @@ jobs:
     name: epubcheck (synthetic fixtures)
     runs-on: ubuntu-latest
     needs: quality
+    # epubcheck zip download + JRE bootstrap + one synthetic test cell.
+    # 10 minutes is well over the worst expected wall-clock.
+    timeout-minutes: 10
     env:
       EPUBCHECK_VERSION: "5.1.0"
       EPUBCHECK_SHA256: "74a59af8602bf59b1d04266a450d9cdcb5986e36d825adc403cde0d95e88c9e8"
