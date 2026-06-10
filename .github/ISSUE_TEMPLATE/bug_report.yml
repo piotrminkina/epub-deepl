@@ -14,8 +14,8 @@ body:
     id: version
     attributes:
       label: Tool version
-      description: Output of `epub-deepl-prepare --version`
-      placeholder: epub-deepl-prepare 0.1.0
+      description: Output of `epub-deepl --version`
+      placeholder: epub-deepl 0.1.0
     validations:
       required: true
 

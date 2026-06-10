@@ -25,7 +25,7 @@ import subprocess
 
 import pytest
 
-from epub_deepl_prepare.cli import main as cli_main
+from epub_deepl.cli import main as cli_main
 
 _EPUBCHECK = shutil.which("epubcheck")
 _MSG_PATTERN = re.compile(r"(?P<f>\d+) fatals?\s*/\s*(?P<e>\d+) errors?\s*/\s*(?P<w>\d+) warnings?")

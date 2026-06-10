@@ -8,7 +8,7 @@ import zipfile
 
 import pytest
 
-from epub_deepl_prepare.errors import (
+from epub_deepl.errors import (
     BrokenManifest,
     BrokenSpine,
     DrmDetected,
@@ -60,8 +60,8 @@ def _epub_bytes_wrong_mimetype(epub_bytes: bytes) -> bytes:
 @pytest.mark.unit
 def test_validate_accepts_minimal_synthetic_epub() -> None:
     """A well-formed minimal EPUB should pass validation."""
-    from epub_deepl_prepare.epub.reader import read_epub_bytes
-    from epub_deepl_prepare.epub.validator import validate_epub
+    from epub_deepl.epub.reader import read_epub_bytes
+    from epub_deepl.epub.validator import validate_epub
 
     epub = read_epub_bytes(build_minimal_epub())
     validate_epub(epub)  # Should not raise
@@ -70,7 +70,7 @@ def test_validate_accepts_minimal_synthetic_epub() -> None:
 @pytest.mark.unit
 def test_validate_rejects_non_zip_file(tmp_path: pathlib.Path) -> None:
     """A non-ZIP file must be rejected."""
-    from epub_deepl_prepare.epub.reader import read_epub_bytes
+    from epub_deepl.epub.reader import read_epub_bytes
 
     with pytest.raises(NotAnEpub, match="Not a ZIP"):
         read_epub_bytes(b"not a zip file at all")
@@ -79,7 +79,7 @@ def test_validate_rejects_non_zip_file(tmp_path: pathlib.Path) -> None:
 @pytest.mark.unit
 def test_validate_rejects_missing_mimetype() -> None:
     """ZIP without mimetype entry must be rejected."""
-    from epub_deepl_prepare.epub.reader import read_epub_bytes
+    from epub_deepl.epub.reader import read_epub_bytes
 
     epub_bytes = _epub_bytes_without_file(build_minimal_epub(), "mimetype")
     with pytest.raises(NotAnEpub, match="mimetype"):
@@ -89,7 +89,7 @@ def test_validate_rejects_missing_mimetype() -> None:
 @pytest.mark.unit
 def test_validate_rejects_wrong_mimetype_content() -> None:
     """ZIP with wrong mimetype content must be rejected."""
-    from epub_deepl_prepare.epub.reader import read_epub_bytes
+    from epub_deepl.epub.reader import read_epub_bytes
 
     epub_bytes = _epub_bytes_wrong_mimetype(build_minimal_epub())
     with pytest.raises(NotAnEpub, match="mimetype"):
@@ -99,7 +99,7 @@ def test_validate_rejects_wrong_mimetype_content() -> None:
 @pytest.mark.unit
 def test_validate_rejects_missing_container_xml() -> None:
     """ZIP without META-INF/container.xml must be rejected."""
-    from epub_deepl_prepare.epub.reader import read_epub_bytes
+    from epub_deepl.epub.reader import read_epub_bytes
 
     epub_bytes = _epub_bytes_without_file(build_minimal_epub(), "META-INF/container.xml")
     with pytest.raises(NotAnEpub, match="container"):
@@ -109,7 +109,7 @@ def test_validate_rejects_missing_container_xml() -> None:
 @pytest.mark.unit
 def test_validate_rejects_drm_protected_epub() -> None:
     """EPUB with META-INF/encryption.xml must raise DrmDetected."""
-    from epub_deepl_prepare.epub.reader import read_epub_bytes
+    from epub_deepl.epub.reader import read_epub_bytes
 
     epub_bytes = build_minimal_epub(include_drm=True)
     with pytest.raises(DrmDetected, match="DRM"):
@@ -119,8 +119,8 @@ def test_validate_rejects_drm_protected_epub() -> None:
 @pytest.mark.unit
 def test_validate_rejects_manifest_with_missing_file() -> None:
     """EPUB whose manifest references a missing file must raise BrokenManifest."""
-    from epub_deepl_prepare.epub.reader import read_epub_bytes
-    from epub_deepl_prepare.epub.validator import validate_epub
+    from epub_deepl.epub.reader import read_epub_bytes
+    from epub_deepl.epub.validator import validate_epub
 
     # Remove ch03.xhtml but keep it in the manifest
     epub_bytes = _epub_bytes_without_file(build_minimal_epub(), "OEBPS/ch03.xhtml")
@@ -132,8 +132,8 @@ def test_validate_rejects_manifest_with_missing_file() -> None:
 @pytest.mark.unit
 def test_validate_lists_all_missing_files_in_error() -> None:
     """BrokenManifest message must list the missing file hrefs."""
-    from epub_deepl_prepare.epub.reader import read_epub_bytes
-    from epub_deepl_prepare.epub.validator import validate_epub
+    from epub_deepl.epub.reader import read_epub_bytes
+    from epub_deepl.epub.validator import validate_epub
 
     epub_bytes = _epub_bytes_without_file(build_minimal_epub(), "OEBPS/ch02.xhtml")
     epub = read_epub_bytes(epub_bytes)
@@ -145,9 +145,9 @@ def test_validate_lists_all_missing_files_in_error() -> None:
 @pytest.mark.unit
 def test_validate_rejects_spine_with_unresolved_idref() -> None:
     """Spine with unresolved idref must raise BrokenSpine."""
-    from epub_deepl_prepare.epub.model import SpineRef
-    from epub_deepl_prepare.epub.reader import read_epub_bytes
-    from epub_deepl_prepare.epub.validator import validate_epub
+    from epub_deepl.epub.model import SpineRef
+    from epub_deepl.epub.reader import read_epub_bytes
+    from epub_deepl.epub.validator import validate_epub
 
     epub = read_epub_bytes(build_minimal_epub())
     epub.spine.items.append(SpineRef(idref="nonexistent-id"))
@@ -158,8 +158,8 @@ def test_validate_rejects_spine_with_unresolved_idref() -> None:
 @pytest.mark.unit
 def test_validate_rejects_missing_ncx() -> None:
     """EPUB without NCX must raise MissingNcx."""
-    from epub_deepl_prepare.epub.reader import read_epub_bytes
-    from epub_deepl_prepare.epub.validator import validate_epub
+    from epub_deepl.epub.reader import read_epub_bytes
+    from epub_deepl.epub.validator import validate_epub
 
     epub = read_epub_bytes(build_minimal_epub())
     epub.ncx = None
@@ -170,8 +170,8 @@ def test_validate_rejects_missing_ncx() -> None:
 @pytest.mark.unit
 def test_validate_rejects_non_xhtml_spine_item() -> None:
     """Spine item with non-XHTML media-type must raise UnsupportedMediaType (US-020)."""
-    from epub_deepl_prepare.epub.reader import read_epub_bytes
-    from epub_deepl_prepare.epub.validator import validate_epub
+    from epub_deepl.epub.reader import read_epub_bytes
+    from epub_deepl.epub.validator import validate_epub
 
     epub = read_epub_bytes(build_minimal_epub())
     # Corrupt the media-type of the first spine item
@@ -184,8 +184,8 @@ def test_validate_rejects_non_xhtml_spine_item() -> None:
 @pytest.mark.unit
 def test_validate_translated_html_missing_sections() -> None:
     """Translated HTML missing sections raises TranslatedHtmlMismatch."""
-    from epub_deepl_prepare.epub.reader import read_epub_bytes
-    from epub_deepl_prepare.epub.validator import validate_translated_html
+    from epub_deepl.epub.reader import read_epub_bytes
+    from epub_deepl.epub.validator import validate_translated_html
 
     epub = read_epub_bytes(build_minimal_epub())
     # Provide only 1 of 3 sections
@@ -197,10 +197,10 @@ def test_validate_translated_html_missing_sections() -> None:
 @pytest.mark.unit
 def test_validate_translated_html_unknown_sections() -> None:
     """Translated HTML with extra unknown sections raises TranslatedHtmlMismatch."""
-    from epub_deepl_prepare.epub.reader import read_epub_bytes
-    from epub_deepl_prepare.epub.validator import validate_translated_html
-    from epub_deepl_prepare.merge.builder import build
-    from epub_deepl_prepare.restore.parser import parse_translated_html_bytes
+    from epub_deepl.epub.reader import read_epub_bytes
+    from epub_deepl.epub.validator import validate_translated_html
+    from epub_deepl.merge.builder import build
+    from epub_deepl.restore.parser import parse_translated_html_bytes
 
     epub = read_epub_bytes(build_minimal_epub())
     merged = build(epub)
@@ -216,7 +216,7 @@ def test_check_output_not_exists_raises_when_exists(
     tmp_path: pathlib.Path,
 ) -> None:
     """OutputExists raised when output file exists and force=False."""
-    from epub_deepl_prepare.epub.validator import check_output_not_exists
+    from epub_deepl.epub.validator import check_output_not_exists
 
     existing = tmp_path / "out.html"
     existing.write_text("x")
@@ -229,7 +229,7 @@ def test_check_output_not_exists_no_raise_when_force(
     tmp_path: pathlib.Path,
 ) -> None:
     """No error raised when force=True even if file exists."""
-    from epub_deepl_prepare.epub.validator import check_output_not_exists
+    from epub_deepl.epub.validator import check_output_not_exists
 
     existing = tmp_path / "out.html"
     existing.write_text("x")
@@ -239,7 +239,7 @@ def test_check_output_not_exists_no_raise_when_force(
 @pytest.mark.unit
 def test_check_output_not_input_raises_on_collision(tmp_path: pathlib.Path) -> None:
     """OutputEqualsInput raised when output path == input path (US-018)."""
-    from epub_deepl_prepare.epub.validator import check_output_not_input
+    from epub_deepl.epub.validator import check_output_not_input
 
     p = str(tmp_path / "book.epub")
     with pytest.raises(OutputEqualsInput, match="Output path equals input path"):

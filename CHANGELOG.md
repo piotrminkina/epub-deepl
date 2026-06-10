@@ -26,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`docs/plans/lessons-learned.md`** capturing real-world gotchas
   (G-1..G-4), empirical DeepL behaviour catalog, and process
   retrospective (P-1..P-5).
-- **`bin/epub-deepl-prepare`** launcher that self-locates the project
+- **`bin/epub-deepl`** launcher that self-locates the project
   venv and detects Python minor-version mismatch with an actionable
   diagnostic.
 - **CONTRIBUTING.md** with the Dev Container workflow, quality gates,
@@ -41,8 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   explicitly to override. Drift warning when the chosen primary
   subtag matches the source EPUB's. (See [ADR-0002](docs/adr/0002-bcp47-passthrough.md).)
 - **Project renamed** from `epub-translation-prepare` to
-  `epub-deepl-prepare`. Package, CLI, module, and devcontainer
-  identifiers updated; display name "EPUB DeepL Prepare" on
+  `epub-deepl`. Package, CLI, module, and devcontainer
+  identifiers updated; display name "EPUB DeepL" on
   human-facing surfaces.
 - **README split into user-facing README + CONTRIBUTING.md**. README
   no longer requires the Dev Container to run the tool.

@@ -56,7 +56,7 @@ _NESTED_NCX = b"""<?xml version="1.0" encoding="UTF-8"?>
 @pytest.mark.unit
 def test_parse_flat_navmap() -> None:
     """parse_ncx correctly parses a flat navMap."""
-    from epub_deepl_prepare.epub.ncx import parse_ncx
+    from epub_deepl.epub.ncx import parse_ncx
 
     ncx = parse_ncx(_FLAT_NCX, "OEBPS/toc.ncx")
     assert ncx.doc_title == "Flat Book"
@@ -70,7 +70,7 @@ def test_parse_flat_navmap() -> None:
 @pytest.mark.unit
 def test_parse_nested_navmap_depth_3() -> None:
     """parse_ncx parses a 3-level nested navMap correctly."""
-    from epub_deepl_prepare.epub.ncx import parse_ncx
+    from epub_deepl.epub.ncx import parse_ncx
 
     ncx = parse_ncx(_NESTED_NCX, "OEBPS/toc.ncx")
     assert len(ncx.nav_map) == 1  # one top-level entry
@@ -87,7 +87,7 @@ def test_parse_nested_navmap_depth_3() -> None:
 @pytest.mark.unit
 def test_parse_preserves_play_order() -> None:
     """playOrder attributes are extracted as integers."""
-    from epub_deepl_prepare.epub.ncx import parse_ncx
+    from epub_deepl.epub.ncx import parse_ncx
 
     ncx = parse_ncx(_FLAT_NCX, "OEBPS/toc.ncx")
     assert ncx.nav_map[0].play_order == 1
@@ -97,7 +97,7 @@ def test_parse_preserves_play_order() -> None:
 @pytest.mark.unit
 def test_serialize_replaces_navlabel_text_only() -> None:
     """rebuild_ncx_bytes replaces only navLabel text, not structure."""
-    from epub_deepl_prepare.epub.ncx import parse_ncx, rebuild_ncx_bytes
+    from epub_deepl.epub.ncx import parse_ncx, rebuild_ncx_bytes
 
     ncx = parse_ncx(_FLAT_NCX, "OEBPS/toc.ncx")
     new_labels = {"np1": "Kapitel 1", "np2": "Kapitel 2"}
@@ -117,7 +117,7 @@ def test_serialize_replaces_navlabel_text_only() -> None:
 @pytest.mark.unit
 def test_serialize_preserves_dtb_meta_uid() -> None:
     """The dtb:uid meta element is preserved after rebuild."""
-    from epub_deepl_prepare.epub.ncx import parse_ncx, rebuild_ncx_bytes
+    from epub_deepl.epub.ncx import parse_ncx, rebuild_ncx_bytes
 
     ncx = parse_ncx(_FLAT_NCX, "OEBPS/toc.ncx")
     new_bytes = rebuild_ncx_bytes(ncx, "New Title", {})
@@ -128,7 +128,7 @@ def test_serialize_preserves_dtb_meta_uid() -> None:
 @pytest.mark.unit
 def test_serialize_preserves_play_order() -> None:
     """playOrder attributes are preserved after rebuild."""
-    from epub_deepl_prepare.epub.ncx import parse_ncx, rebuild_ncx_bytes
+    from epub_deepl.epub.ncx import parse_ncx, rebuild_ncx_bytes
 
     ncx = parse_ncx(_FLAT_NCX, "OEBPS/toc.ncx")
     new_bytes = rebuild_ncx_bytes(ncx, "Same Title", {})
@@ -142,7 +142,7 @@ def test_ncx_canonical_xml_manifest_preserved() -> None:
     """NCX structural elements are canonical-XML-equal after rebuild (C-2)."""
     from lxml import etree
 
-    from epub_deepl_prepare.epub.ncx import parse_ncx, rebuild_ncx_bytes
+    from epub_deepl.epub.ncx import parse_ncx, rebuild_ncx_bytes
 
     ncx = parse_ncx(_FLAT_NCX, "OEBPS/toc.ncx")
     new_bytes = rebuild_ncx_bytes(ncx, ncx.doc_title, {})

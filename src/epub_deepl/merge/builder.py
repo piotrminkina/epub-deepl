@@ -11,10 +11,10 @@ from __future__ import annotations
 
 import html
 
-from epub_deepl_prepare.epub._safe_parser import parse_xml_recover
-from epub_deepl_prepare.epub.model import Epub, NavPoint
-from epub_deepl_prepare.epub.xhtml import count_ruby_elements
-from epub_deepl_prepare.logging_setup import get_logger
+from epub_deepl.epub._safe_parser import parse_xml_recover
+from epub_deepl.epub.model import Epub, NavPoint
+from epub_deepl.epub.xhtml import count_ruby_elements
+from epub_deepl.logging_setup import get_logger
 
 _log = get_logger("merge.builder")
 

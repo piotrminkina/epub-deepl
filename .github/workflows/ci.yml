@@ -58,7 +58,7 @@ jobs:
         run: ruff format --check src tests
 
       - name: Type check
-        run: mypy --strict src/epub_deepl_prepare
+        run: mypy --strict src/epub_deepl
 
       - name: Unit + synth integration tests
         # corpus tests are skipped (no /tmp/nowe in CI); epubcheck tests are

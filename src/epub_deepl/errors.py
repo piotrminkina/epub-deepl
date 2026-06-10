@@ -1,4 +1,4 @@
-"""Typed exception hierarchy for epub-deepl-prepare.
+"""Typed exception hierarchy for epub-deepl.
 
 Exit code mapping:
     UserError subclasses → exit code 1

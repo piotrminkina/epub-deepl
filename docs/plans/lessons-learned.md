@@ -1,4 +1,4 @@
-# Lessons Learned — epub-deepl-prepare
+# Lessons Learned — epub-deepl
 
 **Last validated:** 2026-06-10
 

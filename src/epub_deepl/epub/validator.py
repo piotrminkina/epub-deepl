@@ -10,8 +10,8 @@ import pathlib
 import posixpath
 import zipfile
 
-from epub_deepl_prepare.epub.model import Epub
-from epub_deepl_prepare.errors import (
+from epub_deepl.epub.model import Epub
+from epub_deepl.errors import (
     BrokenManifest,
     BrokenSpine,
     MissingNcx,

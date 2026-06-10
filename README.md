@@ -1,8 +1,8 @@
-# EPUB DeepL Prepare
+# EPUB DeepL
 
 <!--
   Badge URLs include OWNER/REPO placeholders. Replace with the actual
-  GitHub path (e.g. `piotrminkina/epub-deepl-prepare`) once the repo
+  GitHub path (e.g. `piotrminkina/epub-deepl`) once the repo
   is published.
 -->
 
@@ -32,12 +32,12 @@ the system libraries for `lxml` (typically present, or installable via
 `apt install libxml2 libxslt1.1`) is sufficient.
 
 ```bash
-git clone <your-fork> epub-deepl-prepare
-cd epub-deepl-prepare
+git clone <your-fork> epub-deepl
+cd epub-deepl
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -e .
-epub-deepl-prepare --help
+epub-deepl --help
 ```
 
 If you prefer to invoke the tool without activating the virtualenv each
@@ -55,14 +55,14 @@ step.
 
 ```bash
 # 1. Bundle the EPUB into a single HTML for DeepL
-epub-deepl-prepare prepare path/to/book.epub
+epub-deepl prepare path/to/book.epub
 #   → produces path/to/book.prepare.html
 
 # 2. Upload book.prepare.html to https://www.deepl.com/translator/files,
 #    choose target language, download the translated HTML.
 
 # 3. Reassemble the translated EPUB
-epub-deepl-prepare restore path/to/book.epub path/to/book.translated.html
+epub-deepl restore path/to/book.epub path/to/book.translated.html
 #   → produces path/to/book.translated.epub
 ```
 
@@ -79,18 +79,18 @@ are mutated.
 
 ### `bin/` launcher (no venv activation)
 
-`bin/epub-deepl-prepare` is a thin Bash wrapper that self-locates the
+`bin/epub-deepl` is a thin Bash wrapper that self-locates the
 project's `.venv` interpreter directly. Use it when invoking the tool from
 outside an activated virtualenv — shell aliases, cron jobs, editor
 integrations:
 
 ```bash
 # Run from any directory
-/path/to/repo/bin/epub-deepl-prepare prepare book.epub
+/path/to/repo/bin/epub-deepl prepare book.epub
 
 # Or place on PATH
-ln -s "$(pwd)/bin/epub-deepl-prepare" ~/.local/bin/
-epub-deepl-prepare prepare book.epub
+ln -s "$(pwd)/bin/epub-deepl" ~/.local/bin/
+epub-deepl prepare book.epub
 ```
 
 The wrapper fails fast with a diagnostic if the virtualenv is missing.
@@ -99,9 +99,9 @@ The wrapper fails fast with a diagnostic if the virtualenv is missing.
 
 | Command | Description |
 |---|---|
-| `epub-deepl-prepare prepare <input.epub>` | Validate input and emit `<stem>.prepare.html` |
-| `epub-deepl-prepare restore <input.epub> <translated.html> [--lang <code>]` | Validate translated HTML against the input EPUB and emit `<stem>.translated.epub`. `--lang` is optional (auto-detected from `<html lang>`). |
-| `epub-deepl-prepare --help` | Top-level usage |
+| `epub-deepl prepare <input.epub>` | Validate input and emit `<stem>.prepare.html` |
+| `epub-deepl restore <input.epub> <translated.html> [--lang <code>]` | Validate translated HTML against the input EPUB and emit `<stem>.translated.epub`. `--lang` is optional (auto-detected from `<html lang>`). |
+| `epub-deepl --help` | Top-level usage |
 | `<subcommand> --help` | Flags for a specific subcommand |
 
 Common flags on both subcommands:

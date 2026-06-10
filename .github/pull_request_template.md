@@ -8,7 +8,7 @@ Thanks for the contribution. A few things before you submit:
   3. Run the full quality gate locally:
        ruff check src tests
        ruff format --check src tests
-       mypy --strict src/epub_deepl_prepare
+       mypy --strict src/epub_deepl
        pytest -m 'not corpus or corpus'
      CI will run the same plus the epubcheck job on synthetic fixtures.
   4. For structural changes (OPF / NCX / writer logic), include or update
@@ -34,7 +34,7 @@ Thanks for the contribution. A few things before you submit:
 
 - [ ] `ruff check src tests` clean
 - [ ] `ruff format --check src tests` clean
-- [ ] `mypy --strict src/epub_deepl_prepare` clean
+- [ ] `mypy --strict src/epub_deepl` clean
 - [ ] `pytest -m 'not corpus'` green
 - [ ] If touching restore / writer / OPF / NCX: ran `epubcheck` on a
       round-tripped corpus or synthetic EPUB; result documented below.

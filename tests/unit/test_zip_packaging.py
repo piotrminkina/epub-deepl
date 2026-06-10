@@ -17,11 +17,11 @@ from tests.fixtures.minimal import XhtmlSpec, build_minimal_epub
 
 def _write_test_epub() -> bytes:
     """Write a round-trip EPUB and return its bytes."""
-    from epub_deepl_prepare.epub.reader import read_epub_bytes
-    from epub_deepl_prepare.epub.writer import write_epub_bytes
-    from epub_deepl_prepare.merge.builder import build
-    from epub_deepl_prepare.restore.applier import apply_and_write_bytes
-    from epub_deepl_prepare.restore.parser import parse_translated_html_bytes
+    from epub_deepl.epub.reader import read_epub_bytes
+    from epub_deepl.epub.writer import write_epub_bytes
+    from epub_deepl.merge.builder import build
+    from epub_deepl.restore.applier import apply_and_write_bytes
+    from epub_deepl.restore.parser import parse_translated_html_bytes
 
     source_epub = build_minimal_epub()
     epub = read_epub_bytes(source_epub)

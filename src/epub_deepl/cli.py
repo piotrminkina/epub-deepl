@@ -1,4 +1,4 @@
-"""CLI entry point for epub-deepl-prepare.
+"""CLI entry point for epub-deepl.
 
 Subcommands:
   prepare <input.epub> [--output FILE] [--force] [--verbose]
@@ -17,26 +17,26 @@ import pathlib
 import sys
 import traceback
 
-from epub_deepl_prepare import __version__
-from epub_deepl_prepare.epub._bcp47 import is_well_formed, primary_subtag
-from epub_deepl_prepare.epub.reader import read_epub
-from epub_deepl_prepare.epub.validator import (
+from epub_deepl import __version__
+from epub_deepl.epub._bcp47 import is_well_formed, primary_subtag
+from epub_deepl.epub.reader import read_epub
+from epub_deepl.epub.validator import (
     check_output_not_exists,
     check_output_not_input,
     validate_epub,
 )
-from epub_deepl_prepare.errors import EpubTranslationError, InternalError, UserError
-from epub_deepl_prepare.logging_setup import configure, get_logger
-from epub_deepl_prepare.merge.builder import build, count_ruby
-from epub_deepl_prepare.restore.applier import apply_and_write
-from epub_deepl_prepare.restore.parser import parse_translated_html
+from epub_deepl.errors import EpubTranslationError, InternalError, UserError
+from epub_deepl.logging_setup import configure, get_logger
+from epub_deepl.merge.builder import build, count_ruby
+from epub_deepl.restore.applier import apply_and_write
+from epub_deepl.restore.parser import parse_translated_html
 
 _log = get_logger("cli")
 
 
 def _make_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="epub-deepl-prepare",
+        prog="epub-deepl",
         description=(
             "Prepare an EPUB for translation via DeepL (prepare), "
             "or reassemble the translated EPUB (restore)."

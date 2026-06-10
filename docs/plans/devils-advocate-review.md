@@ -1,4 +1,4 @@
-# Devil's Advocate Review — epub-deepl-prepare
+# Devil's Advocate Review — epub-deepl
 
 **Mode:** Devil's Advocate (primary) + Unknown Unknowns (secondary).
 **Scope:** `prd.md`, `tech-stack.md`, `tech-spec.md`, `test-plan.md`.

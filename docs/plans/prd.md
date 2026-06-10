@@ -1,4 +1,4 @@
-# Product Requirements Document (PRD) — epub-deepl-prepare
+# Product Requirements Document (PRD) — epub-deepl
 
 **Status:** Draft v1 (MVP)
 **Owner:** Solo developer (single user)
@@ -9,7 +9,7 @@
 
 ## 1. Product Overview
 
-`epub-deepl-prepare` is a Python CLI tool that prepares an EPUB file for
+`epub-deepl` is a Python CLI tool that prepares an EPUB file for
 translation by bundling all human-facing content into a single HTML5 document
 suitable for upload to DeepL's HTML document translation, and then reassembles
 the translated HTML back into a structurally identical EPUB.
@@ -113,8 +113,8 @@ to the reader.
 
 ### FR-3: CLI surface
 
-- `epub-deepl-prepare prepare <input.epub> [--output FILE] [--force]`
-- `epub-deepl-prepare restore <input.epub> <translated.html> [--lang <code>] [--output FILE] [--force]`
+- `epub-deepl prepare <input.epub> [--output FILE] [--force]`
+- `epub-deepl restore <input.epub> <translated.html> [--lang <code>] [--output FILE] [--force]`
 - `--lang` accepts a BCP 47 tag (e.g. `pl`, `en`, `de`, `pt-BR`). It is
   optional; auto-detected from the translated HTML's `<html lang>` when
   omitted. See US-009 for the full resolution order.

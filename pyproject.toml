@@ -3,14 +3,14 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "epub-deepl-prepare"
+name = "epub-deepl"
 version = "0.1.0"
 description = "Prepare EPUB files for round-trip translation via DeepL"
 requires-python = ">=3.11"
 dependencies = ["lxml>=5.0"]
 
 [project.scripts]
-epub-deepl-prepare = "epub_deepl_prepare.cli:main"
+epub-deepl = "epub_deepl.cli:main"
 
 [project.optional-dependencies]
 dev = [
@@ -22,7 +22,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/epub_deepl_prepare"]
+packages = ["src/epub_deepl"]
 
 [tool.ruff]
 line-length = 100
@@ -76,7 +76,7 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["src/epub_deepl_prepare"]
+source = ["src/epub_deepl"]
 branch = true
 
 [tool.coverage.report]

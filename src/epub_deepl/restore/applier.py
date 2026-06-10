@@ -9,14 +9,14 @@ Restore flow (tech-spec §5):
 
 from __future__ import annotations
 
-from epub_deepl_prepare.epub.model import Epub, NavPoint
-from epub_deepl_prepare.epub.ncx import resolve_label
-from epub_deepl_prepare.epub.validator import validate_translated_html
-from epub_deepl_prepare.epub.writer import write_epub, write_epub_bytes
-from epub_deepl_prepare.epub.xhtml import replace_body_content
-from epub_deepl_prepare.errors import TranslatedHtmlMismatch
-from epub_deepl_prepare.logging_setup import get_logger
-from epub_deepl_prepare.restore.parser import TranslatedDoc
+from epub_deepl.epub.model import Epub, NavPoint
+from epub_deepl.epub.ncx import resolve_label
+from epub_deepl.epub.validator import validate_translated_html
+from epub_deepl.epub.writer import write_epub, write_epub_bytes
+from epub_deepl.epub.xhtml import replace_body_content
+from epub_deepl.errors import TranslatedHtmlMismatch
+from epub_deepl.logging_setup import get_logger
+from epub_deepl.restore.parser import TranslatedDoc
 
 _log = get_logger("restore.applier")
 

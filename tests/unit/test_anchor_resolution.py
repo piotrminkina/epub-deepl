@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from epub_deepl_prepare.epub.model import Epub, NavPoint
-from epub_deepl_prepare.epub.ncx import normalize_whitespace, xpath_literal
+from epub_deepl.epub.model import Epub, NavPoint
+from epub_deepl.epub.ncx import normalize_whitespace, xpath_literal
 
 
 def _make_epub_with_xhtmls(
@@ -13,7 +13,7 @@ def _make_epub_with_xhtmls(
     opf_dir: str = "OEBPS",
 ) -> Epub:
     """Build a minimal Epub model with given XHTML content."""
-    from epub_deepl_prepare.epub.model import (
+    from epub_deepl.epub.model import (
         Epub,
         ManifestItem,
         NavPoint,
@@ -66,7 +66,7 @@ def _make_epub_with_xhtmls(
 @pytest.mark.unit
 def test_resolve_label_with_fragment() -> None:
     """Anchor resolution finds element by id when src has fragment."""
-    from epub_deepl_prepare.epub.ncx import resolve_label
+    from epub_deepl.epub.ncx import resolve_label
 
     epub = _make_epub_with_xhtmls(
         {
@@ -89,7 +89,7 @@ def test_resolve_label_with_fragment() -> None:
 @pytest.mark.unit
 def test_resolve_label_with_fragment_resolves_to_correct_id() -> None:
     """Anchor resolution picks the element with the matching id, not any heading."""
-    from epub_deepl_prepare.epub.ncx import resolve_label
+    from epub_deepl.epub.ncx import resolve_label
 
     epub = _make_epub_with_xhtmls(
         {
@@ -112,7 +112,7 @@ def test_resolve_label_with_fragment_resolves_to_correct_id() -> None:
 @pytest.mark.unit
 def test_resolve_label_with_fragment_returns_normalized_whitespace() -> None:
     """Label is whitespace-normalised (SM-3)."""
-    from epub_deepl_prepare.epub.ncx import resolve_label
+    from epub_deepl.epub.ncx import resolve_label
 
     epub = _make_epub_with_xhtmls(
         {
@@ -133,7 +133,7 @@ def test_resolve_label_with_fragment_returns_normalized_whitespace() -> None:
 @pytest.mark.unit
 def test_resolve_label_without_fragment_uses_first_heading() -> None:
     """When src has no fragment, first heading is used."""
-    from epub_deepl_prepare.epub.ncx import resolve_label
+    from epub_deepl.epub.ncx import resolve_label
 
     epub = _make_epub_with_xhtmls(
         {
@@ -154,7 +154,7 @@ def test_resolve_label_without_fragment_uses_first_heading() -> None:
 @pytest.mark.unit
 def test_resolve_label_h2_used_when_no_h1() -> None:
     """Falls through to h2 if no h1 exists."""
-    from epub_deepl_prepare.epub.ncx import resolve_label
+    from epub_deepl.epub.ncx import resolve_label
 
     epub = _make_epub_with_xhtmls(
         {
@@ -175,7 +175,7 @@ def test_resolve_label_h2_used_when_no_h1() -> None:
 @pytest.mark.unit
 def test_resolve_label_h3_used_when_no_h1_h2() -> None:
     """Falls through to h3 if no h1 or h2 exists."""
-    from epub_deepl_prepare.epub.ncx import resolve_label
+    from epub_deepl.epub.ncx import resolve_label
 
     epub = _make_epub_with_xhtmls(
         {
@@ -196,7 +196,7 @@ def test_resolve_label_h3_used_when_no_h1_h2() -> None:
 @pytest.mark.unit
 def test_resolve_label_no_heading_falls_back_to_flat_label() -> None:
     """When no heading exists, flat_labels fallback is used."""
-    from epub_deepl_prepare.epub.ncx import resolve_label
+    from epub_deepl.epub.ncx import resolve_label
 
     epub = _make_epub_with_xhtmls(
         {
@@ -217,7 +217,7 @@ def test_resolve_label_no_heading_falls_back_to_flat_label() -> None:
 @pytest.mark.unit
 def test_resolve_label_missing_fragment_no_heading_falls_back_to_flat_label() -> None:
     """Fragment not found + no heading → flat_label fallback."""
-    from epub_deepl_prepare.epub.ncx import resolve_label
+    from epub_deepl.epub.ncx import resolve_label
 
     epub = _make_epub_with_xhtmls(
         {
@@ -238,7 +238,7 @@ def test_resolve_label_missing_fragment_no_heading_falls_back_to_flat_label() ->
 @pytest.mark.unit
 def test_resolve_label_id_collision_across_files_scoped_per_file() -> None:
     """Same id in two files resolves to the correct file's element (R-4 / C-3)."""
-    from epub_deepl_prepare.epub.ncx import resolve_label
+    from epub_deepl.epub.ncx import resolve_label
 
     epub = _make_epub_with_xhtmls(
         {
@@ -272,7 +272,7 @@ def test_resolve_label_id_collision_across_files_scoped_per_file() -> None:
 @pytest.mark.unit
 def test_resolve_label_ncx_in_subdirectory() -> None:
     """C-3: NCX src is resolved relative to NCX directory, not OPF directory."""
-    from epub_deepl_prepare.epub.ncx import resolve_label
+    from epub_deepl.epub.ncx import resolve_label
 
     # Structure: OPF at OEBPS/content.opf, NCX at OEBPS/toc.ncx, XHTML at OEBPS/Text/ch01.xhtml
     epub = _make_epub_with_xhtmls({"Text/ch01.xhtml": '<h1 id="h1">Correct Title</h1>'})

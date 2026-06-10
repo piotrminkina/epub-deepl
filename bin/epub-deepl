@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 #
-# epub-deepl-prepare — CLI launcher using the project virtualenv directly.
+# epub-deepl — CLI launcher using the project virtualenv directly.
 #
 # Resolves the project root from this script's own path, locates the
 # ``.venv/bin/python`` interpreter, and execs the CLI module. Works from any
 # working directory and does NOT require the caller to ``source .venv/bin/activate``
 # first. Suitable for placement on PATH (symlink into ~/.local/bin), or for
-# invocation as ./bin/epub-deepl-prepare from a checkout.
+# invocation as ./bin/epub-deepl from a checkout.
 #
 # The launcher proactively detects a venv ↔ host Python minor-version mismatch
 # (common when ``.venv`` was created inside the Dev Container with one Python
@@ -17,8 +17,8 @@
 # Python would otherwise produce.
 #
 # Usage:
-#     bin/epub-deepl-prepare [GLOBAL_OPTIONS] <prepare|restore> [ARGS]
-#     bin/epub-deepl-prepare --help
+#     bin/epub-deepl [GLOBAL_OPTIONS] <prepare|restore> [ARGS]
+#     bin/epub-deepl --help
 #
 # Exit codes:
 #     0  success (forwarded from the Python CLI)
@@ -85,10 +85,10 @@ invoked from a host with a different Python (${actual}).
 
 Two fixes:
   - Rebuild on the host:   rm -rf '${root}/.venv' && python3 -m venv '${root}/.venv' && '${root}/.venv/bin/pip' install -e '${root}[dev]'
-  - Or invoke via container: devcontainer exec --workspace-folder '${root}' epub-deepl-prepare ..."
+  - Or invoke via container: devcontainer exec --workspace-folder '${root}' epub-deepl ..."
     fi
 
-    exec "${python_bin}" -m epub_deepl_prepare "$@"
+    exec "${python_bin}" -m epub_deepl "$@"
 }
 
 # --- Entry point -------------------------------------------------------------

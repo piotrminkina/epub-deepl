@@ -1,4 +1,4 @@
-# Test Plan — epub-deepl-prepare
+# Test Plan — epub-deepl
 
 **Status:** Draft v1
 **Related:** `prd.md` (US-001…US-017, SM-1…SM-6), `tech-stack.md`, `tech-spec.md`
@@ -295,7 +295,7 @@ primary-subtag extraction. Powers the US-009 lang resolver.
 
 ### 7.1 `tests/integration/test_cli.py`
 
-Uses subprocess invocation (`python -m epub_deepl_prepare ...`) or
+Uses subprocess invocation (`python -m epub_deepl ...`) or
 the `cli.main()` entry point with captured `sys.argv` — preferred for
 faster runs.
 
@@ -439,7 +439,7 @@ In `pyproject.toml`:
 
 ```toml
 [tool.coverage.run]
-source = ["src/epub_deepl_prepare"]
+source = ["src/epub_deepl"]
 branch = true
 
 [tool.coverage.report]

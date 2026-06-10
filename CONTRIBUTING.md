@@ -1,4 +1,4 @@
-# Contributing to EPUB DeepL Prepare
+# Contributing to EPUB DeepL
 
 This document covers the development workflow: setting up the environment,
 running the test suite, lint and type checks, code style, and the
@@ -25,8 +25,8 @@ Prerequisites on the host:
 - A JetBrains IDE (PyCharm preferred) or plain shell access
 
 ```bash
-git clone <your-fork> epub-deepl-prepare
-cd epub-deepl-prepare
+git clone <your-fork> epub-deepl
+cd epub-deepl
 devcontainer up --workspace-folder .
 devcontainer exec --workspace-folder . bash -lc 'source .venv/bin/activate'
 ```
@@ -69,8 +69,8 @@ sudo apt install python3.11 python3.11-venv python3.11-dev \
 sudo dnf install python3.11 python3.11-devel \
                  libxml2-devel libxslt-devel zlib-devel gcc
 
-git clone <your-fork> epub-deepl-prepare
-cd epub-deepl-prepare
+git clone <your-fork> epub-deepl
+cd epub-deepl
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
@@ -133,7 +133,7 @@ ruff format src tests
 
 # Strict type check (lxml-stubs noise tolerated; document any new
 # `# type: ignore` comments inline)
-mypy --strict src/epub_deepl_prepare
+mypy --strict src/epub_deepl
 ```
 
 All three commands must return clean before opening a PR.
@@ -145,7 +145,7 @@ All three commands must return clean before opening a PR.
 sudo apt install shellcheck       # Debian / Ubuntu
 sudo dnf install ShellCheck       # Fedora
 
-shellcheck bin/epub-deepl-prepare .devcontainer/post-create.sh
+shellcheck bin/epub-deepl .devcontainer/post-create.sh
 ```
 
 Every script must pass `shellcheck` with zero warnings.
@@ -163,8 +163,8 @@ before each release:
 # Round-trip-without-translation should produce zero new errors.
 # --lang is unnecessary when the merged HTML still carries the original
 # source language; pass it explicitly to force a different value.
-epub-deepl-prepare prepare /tmp/nowe/<book>.epub
-epub-deepl-prepare restore /tmp/nowe/<book>.epub \
+epub-deepl prepare /tmp/nowe/<book>.epub
+epub-deepl restore /tmp/nowe/<book>.epub \
     /tmp/nowe/<book>.prepare.html \
     --output /tmp/<book>.translated.epub
 
@@ -215,7 +215,7 @@ enough that local consistency is the right baseline.
 │   │                              flows, anchor resolution, ZIP rules
 │   ├── test-plan.md               Test pyramid, fixtures, coverage matrix
 │   └── devils-advocate-review.md  Critical findings + adversarial review
-├── src/epub_deepl_prepare/        Source package
+├── src/epub_deepl/        Source package
 │   ├── cli.py                     argparse entry; dispatches to prepare/restore
 │   ├── errors.py                  Typed exception hierarchy
 │   ├── logging_setup.py           stderr formatting, --verbose flag
@@ -254,7 +254,7 @@ Every change must pass these gates before merging:
 |---|---|
 | Lint | `ruff check src tests` |
 | Format | `ruff format --check src tests` |
-| Types | `mypy --strict src/epub_deepl_prepare` |
+| Types | `mypy --strict src/epub_deepl` |
 | Tests | `pytest -m 'not corpus or corpus'` |
 | Shell scripts | `shellcheck bin/* .devcontainer/*.sh` |
 | Round-trip integrity | Manual `epubcheck` per the recipe above |

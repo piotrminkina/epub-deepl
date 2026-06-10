@@ -30,7 +30,7 @@ needs to be overridden.
 
 ## Decision
 
-`src/epub_deepl_prepare/epub/_safe_parser.py` is the **sole authorized
+`src/epub_deepl/epub/_safe_parser.py` is the **sole authorized
 factory** for parser construction. All other modules import
 `parse_xml`, `parse_xml_recover`, or `parse_html_document` and never
 instantiate `lxml.etree.XMLParser` or `lxml.html.HTMLParser` directly.

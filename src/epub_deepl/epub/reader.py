@@ -12,12 +12,12 @@ import zipfile
 
 from lxml import etree
 
-from epub_deepl_prepare.epub import opf as opf_module
-from epub_deepl_prepare.epub._safe_parser import parse_xml
-from epub_deepl_prepare.epub.model import Epub, XhtmlFile
-from epub_deepl_prepare.epub.ncx import parse_ncx
-from epub_deepl_prepare.epub.xhtml import extract_body_html
-from epub_deepl_prepare.errors import DrmDetected, MissingNcx, NotAnEpub
+from epub_deepl.epub import opf as opf_module
+from epub_deepl.epub._safe_parser import parse_xml
+from epub_deepl.epub.model import Epub, XhtmlFile
+from epub_deepl.epub.ncx import parse_ncx
+from epub_deepl.epub.xhtml import extract_body_html
+from epub_deepl.errors import DrmDetected, MissingNcx, NotAnEpub
 
 # Max uncompressed EPUB size (500 MB) — zip-bomb guard (tech-spec §10)
 _MAX_EPUB_SIZE_BYTES = 500 * 1024 * 1024

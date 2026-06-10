@@ -16,9 +16,9 @@ import pathlib
 import posixpath
 import zipfile
 
-from epub_deepl_prepare.epub.model import Epub, OpfMetadata
-from epub_deepl_prepare.epub.ncx import rebuild_ncx_bytes
-from epub_deepl_prepare.epub.opf import rebuild_opf_bytes
+from epub_deepl.epub.model import Epub, OpfMetadata
+from epub_deepl.epub.ncx import rebuild_ncx_bytes
+from epub_deepl.epub.opf import rebuild_opf_bytes
 
 
 def write_epub(

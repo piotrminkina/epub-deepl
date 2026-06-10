@@ -11,7 +11,7 @@ from tests.fixtures.minimal import build_minimal_epub
 @pytest.mark.unit
 def test_parse_extracts_all_dc_titles_in_order() -> None:
     """Multiple dc:title elements are extracted in document order."""
-    from epub_deepl_prepare.epub.opf import parse_metadata
+    from epub_deepl.epub.opf import parse_metadata
 
     opf = b"""<?xml version="1.0"?>
 <package version="2.0" xmlns="http://www.idpf.org/2007/opf">
@@ -29,7 +29,7 @@ def test_parse_extracts_all_dc_titles_in_order() -> None:
 @pytest.mark.unit
 def test_parse_extracts_descriptions_subjects_creators() -> None:
     """All translatable and structural fields are extracted correctly."""
-    from epub_deepl_prepare.epub.reader import read_epub_bytes
+    from epub_deepl.epub.reader import read_epub_bytes
 
     epub = read_epub_bytes(
         build_minimal_epub(
@@ -48,7 +48,7 @@ def test_parse_extracts_descriptions_subjects_creators() -> None:
 @pytest.mark.unit
 def test_parse_preserves_opf_namespaced_meta_extensions() -> None:
     """Calibre/Apple custom <meta> elements survive the parse-rebuild cycle."""
-    from epub_deepl_prepare.epub.opf import parse_metadata, rebuild_opf_bytes
+    from epub_deepl.epub.opf import parse_metadata, rebuild_opf_bytes
 
     opf = b"""<?xml version="1.0"?>
 <package version="2.0" xmlns="http://www.idpf.org/2007/opf">
@@ -71,7 +71,7 @@ def test_parse_preserves_opf_namespaced_meta_extensions() -> None:
 @pytest.mark.unit
 def test_set_language_replaces_first_dc_language() -> None:
     """rebuild_opf_bytes replaces dc:language with the target language."""
-    from epub_deepl_prepare.epub.opf import parse_metadata, rebuild_opf_bytes
+    from epub_deepl.epub.opf import parse_metadata, rebuild_opf_bytes
 
     opf = b"""<?xml version="1.0"?>
 <package version="2.0" xmlns="http://www.idpf.org/2007/opf">
@@ -89,12 +89,12 @@ def test_set_language_replaces_first_dc_language() -> None:
 @pytest.mark.unit
 def test_set_language_removes_extras_when_multiple() -> None:
     """When input has multiple dc:language elements, restore writes exactly one."""
-    from epub_deepl_prepare.epub.opf import rebuild_opf_bytes
-    from epub_deepl_prepare.epub.reader import read_epub_bytes
+    from epub_deepl.epub.opf import rebuild_opf_bytes
+    from epub_deepl.epub.reader import read_epub_bytes
 
     epub = read_epub_bytes(build_minimal_epub(languages=["en", "de"]))
     new_bytes = rebuild_opf_bytes(epub.opf_raw_xml, epub.metadata, "pl")
-    from epub_deepl_prepare.epub.opf import parse_metadata
+    from epub_deepl.epub.opf import parse_metadata
 
     rebuilt = parse_metadata(new_bytes)
     assert rebuilt.language == "pl"
@@ -109,7 +109,7 @@ def test_apply_translated_metadata_preserves_non_translated_fields() -> None:
     Uses canonical XML (c14n2) for comparison so cosmetic lxml re-serialisation
     is not flagged as a failure — only real semantic changes are.
     """
-    from epub_deepl_prepare.epub.opf import parse_metadata, rebuild_opf_bytes
+    from epub_deepl.epub.opf import parse_metadata, rebuild_opf_bytes
 
     opf = b"""<?xml version="1.0"?>
 <package version="2.0" xmlns="http://www.idpf.org/2007/opf">
@@ -152,7 +152,7 @@ def test_apply_translated_metadata_preserves_non_translated_fields() -> None:
 @pytest.mark.unit
 def test_opf_serialization_preserves_manifest_and_spine() -> None:
     """After rebuild, manifest and spine are structurally identical (US-013)."""
-    from epub_deepl_prepare.epub.opf import (
+    from epub_deepl.epub.opf import (
         parse_manifest,
         parse_metadata,
         parse_spine,

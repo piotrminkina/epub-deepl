@@ -1,4 +1,4 @@
-# Technical Specification — epub-deepl-prepare
+# Technical Specification — epub-deepl
 
 **Status:** Draft v1
 **Related:** `prd.md` (requirements), `tech-stack.md` (technology choices)
@@ -25,7 +25,7 @@ external state file is generated or required.
 ## 2. Package Layout
 
 ```
-epub-deepl-prepare/
+epub-deepl/
 ├── pyproject.toml
 ├── README.md
 ├── docs/plans/
@@ -34,9 +34,9 @@ epub-deepl-prepare/
 │   ├── tech-spec.md           ← this document
 │   └── test-plan.md
 ├── src/
-│   └── epub_deepl_prepare/
+│   └── epub_deepl/
 │       ├── __init__.py
-│       ├── __main__.py        ← `python -m epub_deepl_prepare`
+│       ├── __main__.py        ← `python -m epub_deepl`
 │       ├── cli.py             ← argparse, dispatch to prepare/restore
 │       ├── errors.py          ← typed exception hierarchy
 │       ├── logging_setup.py   ← stderr formatting, --verbose flag

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from epub_deepl_prepare.epub._bcp47 import is_well_formed, primary_subtag
+from epub_deepl.epub._bcp47 import is_well_formed, primary_subtag
 
 
 @pytest.mark.parametrize(

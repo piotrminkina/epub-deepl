@@ -18,7 +18,7 @@ def _run_cli(args: list[str]) -> tuple[int, str]:
     stderr_buf = io.StringIO()
     with contextlib.redirect_stderr(stderr_buf):
         try:
-            from epub_deepl_prepare.cli import main
+            from epub_deepl.cli import main
 
             rc = main(args)
         except SystemExit as exc:
@@ -280,7 +280,7 @@ def test_no_output_on_stdout_in_normal_run(
     synth_epub_file: pathlib.Path, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """No output must appear on stdout during normal operation."""
-    from epub_deepl_prepare.cli import main
+    from epub_deepl.cli import main
 
     main(["prepare", str(synth_epub_file), "--output", str(tmp_path / "out.html")])
     captured = capsys.readouterr()
