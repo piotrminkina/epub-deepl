@@ -57,13 +57,27 @@ Python does not enforce it against the running interpreter.
 (Python 3.11 on Debian 12) cannot be reused from a Fedora 41+ host
 (Python 3.13+) — even though both can execute the same source.
 
-**Mitigation in this repo:** the `bin/` launcher reads `pyvenv.cfg`'s
-declared minor and compares to `sys.version_info` from the venv's
-python. Mismatch ⇒ clear error with two remediation paths (rebuild
-on host / invoke through container).
+**Mitigation in this repo (final):** [ADR-0004](../adr/0004-per-python-minor-venv.md)
+adopted **per-Python-minor venv naming**: each venv lives at
+`.venv-${PY_MINOR}/` (e.g. `.venv-3.11/`, `.venv-3.14/`). The
+`bin/epub-deepl` launcher resolves the venv by matching the system
+`python3` minor against the venv directory name and `pyvenv.cfg`'s
+declared version. Host and container coexist without conflict —
+each owns its own venv directory.
 
-For sustained dual-environment use, consider splitting:
-`.venv-host/` and `.venv-container/`. Out of MVP scope.
+`.venv/` (unversioned) is supported as a soft fallback for migration:
+the launcher uses it only when its `pyvenv.cfg version` matches the
+current Python minor. New `post-create.sh` runs always create the
+versioned variant.
+
+If no compatible venv exists, the launcher emits a concrete creation
+recipe instead of letting Python produce a bare `No module named …`.
+
+**Intermediate mitigation (earlier, single-venv era):** the launcher
+just detected the version mismatch and printed a remediation message
+asking the user to rebuild or invoke through the container. This was
+sufficient to surface the problem but did not let the two
+environments coexist. Per-minor naming makes coexistence the default.
 
 ### G-3. DeepL lowercases SVG/MathML camelCase attributes
 

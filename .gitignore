@@ -9,8 +9,9 @@ build/
 dist/
 wheels/
 
-# Virtualenvs
+# Virtualenvs (per-Python-minor naming per ADR-0004)
 .venv/
+.venv-*/
 venv/
 ENV/
 

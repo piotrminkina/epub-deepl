@@ -28,14 +28,16 @@ Prerequisites on the host:
 git clone <your-fork> epub-deepl
 cd epub-deepl
 devcontainer up --workspace-folder .
-devcontainer exec --workspace-folder . bash -lc 'source .venv/bin/activate'
+# Container creates .venv-3.11/ (per the container's Python minor —
+# see ADR-0004 on per-Python-minor venv naming).
+devcontainer exec --workspace-folder . bash -lc 'source .venv-3.11/bin/activate'
 ```
 
 First `devcontainer up` builds the Debian-based image, installs the
 `common-utils` feature (which creates the non-root `devcontainer` user
 with UID matched to the host), and runs `post-create.sh` which creates
-`.venv` and `pip install -e ".[dev]"`. Subsequent runs reuse the cached
-image and venv.
+`.venv-${PY_MINOR}/` and `pip install -e ".[dev]"`. Subsequent runs
+reuse the cached image and venv.
 
 What the container provides out of the box:
 
@@ -71,10 +73,19 @@ sudo dnf install python3.11 python3.11-devel \
 
 git clone <your-fork> epub-deepl
 cd epub-deepl
-python3.11 -m venv .venv
-source .venv/bin/activate
+# Name the venv after the Python minor so it coexists with venvs from
+# other interpreters (e.g. the container's .venv-3.11/). See ADR-0004.
+PY_MINOR="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+python3 -m venv ".venv-${PY_MINOR}"
+source ".venv-${PY_MINOR}/bin/activate"
 pip install -e ".[dev]"
 ```
+
+The `bin/epub-deepl` launcher auto-discovers the matching venv: it
+picks `.venv-${PY_MINOR}/` first, then falls back to `.venv/` (legacy)
+only if `pyvenv.cfg` declares the current Python minor. If no
+compatible venv exists, the launcher emits a concrete creation
+recipe instead of a bare `No module named …`.
 
 For `epubcheck` (manual SM-4 release gate), install the W3C reference
 implementation from its release page. Pin to 5.1.0 to match the
@@ -85,7 +96,8 @@ container baseline.
 ## Running the Test Suite
 
 ```bash
-source .venv/bin/activate
+# Activate the venv matching your current Python (see ADR-0004):
+source ".venv-$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')/bin/activate"
 
 # Fast tests only (unit + synth integration; skips the /tmp/nowe corpus)
 pytest

@@ -1,20 +1,34 @@
 #!/usr/bin/env bash
 #
-# epub-deepl — CLI launcher using the project virtualenv directly.
+# epub-deepl — CLI launcher using a Python virtualenv matched to the
+# current interpreter's minor version.
 #
-# Resolves the project root from this script's own path, locates the
-# ``.venv/bin/python`` interpreter, and execs the CLI module. Works from any
-# working directory and does NOT require the caller to ``source .venv/bin/activate``
-# first. Suitable for placement on PATH (symlink into ~/.local/bin), or for
-# invocation as ./bin/epub-deepl from a checkout.
+# Resolves the project root from this script's own path, picks a venv
+# whose declared Python minor equals the system's `python3` minor, and
+# execs the CLI module. Works from any working directory and does NOT
+# require the caller to ``source .venv/bin/activate`` first. Suitable
+# for placement on PATH (symlink into ~/.local/bin), or for invocation
+# as ``./bin/epub-deepl`` from a checkout.
 #
-# The launcher proactively detects a venv ↔ host Python minor-version mismatch
-# (common when ``.venv`` was created inside the Dev Container with one Python
-# minor but the launcher is invoked from a host whose ``/usr/bin/python3`` is a
-# different minor — Python's per-minor ``site-packages`` layout makes the
-# venv's installed packages unreachable in that case). On mismatch it emits a
-# concrete remediation message instead of the bare ``No module named …`` that
-# Python would otherwise produce.
+# Per-Python-minor venv resolution (ADR-0004):
+#
+#   The launcher looks up venvs in this priority order:
+#
+#     1. ``.venv-${PY_MINOR}/`` (preferred — e.g. .venv-3.11 when
+#                                running under Python 3.11)
+#     2. ``.venv/``             (legacy fallback; used only when its
+#                                ``pyvenv.cfg`` ``version`` matches the
+#                                current interpreter's minor)
+#
+#   Host and container can each maintain their own venv without
+#   stepping on each other: a Fedora host running Python 3.14 uses
+#   ``.venv-3.14/`` while a Debian-based Dev Container running Python
+#   3.11 uses ``.venv-3.11/``. No environment-detection heuristics —
+#   ``sys.version_info`` is the canonical truth.
+#
+#   If no compatible venv exists, the launcher emits a concrete
+#   creation recipe instead of the bare ``No module named …`` Python
+#   would otherwise produce.
 #
 # Usage:
 #     bin/epub-deepl [GLOBAL_OPTIONS] <prepare|restore> [ARGS]
@@ -22,7 +36,7 @@
 #
 # Exit codes:
 #     0  success (forwarded from the Python CLI)
-#     1  user error (forwarded; or environment misconfiguration detected here)
+#     1  user error (forwarded; or no compatible venv found)
 #     2  internal error (forwarded)
 #
 
@@ -44,51 +58,69 @@ function project_root() {
     dirname -- "$(dirname -- "${source_path}")"
 }
 
-# Read the ``version = X.Y.Z`` line from a ``pyvenv.cfg`` and echo ``X.Y``.
-# Returns 1 if the file does not exist or the field is missing/unparseable.
-function venv_expected_minor() {
+# Echo the ``X.Y`` minor reported by `python3 --version`. Non-zero exit
+# means python3 is missing or unrunnable.
+function system_python_minor() {
+    python3 -c \
+      'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' \
+      2>/dev/null
+}
+
+# Echo the ``X.Y`` minor declared in a ``pyvenv.cfg``. Non-zero exit
+# means the file is missing or the ``version`` line cannot be parsed.
+function venv_declared_minor() {
     local cfg="$1"
     [[ -f "${cfg}" ]] || return 1
     local raw
     raw="$(awk -F' *= *' '/^version *=/ {print $2; exit}' "${cfg}")"
     [[ -n "${raw}" ]] || return 1
-    # Strip any patch component: 3.11.2 → 3.11; 3.11 stays 3.11.
-    printf '%s\n' "${raw%.*}"
+    printf '%s\n' "${raw%.*}"  # 3.11.2 → 3.11
 }
 
-# Echo ``X.Y`` reported by the given Python interpreter.
-function python_actual_minor() {
-    "$1" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null
+# If ``venv_dir`` contains a working Python whose declared minor equals
+# ``required_minor``, echo the path to its ``bin/python``. Non-zero
+# exit otherwise.
+function pick_venv() {
+    local venv_dir="$1" required_minor="$2"
+    local py="${venv_dir}/bin/python"
+    [[ -x "${py}" ]] || return 1
+    local cfg_minor
+    cfg_minor="$(venv_declared_minor "${venv_dir}/pyvenv.cfg")" || return 1
+    [[ "${cfg_minor}" == "${required_minor}" ]] || return 1
+    printf '%s\n' "${py}"
 }
 
 function main() {
-    local root python_bin pyvenv_cfg expected actual
+    local root current_minor
     root="$(project_root)"
-    python_bin="${root}/.venv/bin/python"
-    pyvenv_cfg="${root}/.venv/pyvenv.cfg"
 
-    if [[ ! -x "${python_bin}" ]]; then
-        die "virtualenv not found at ${root}/.venv (run 'devcontainer up' or 'python3 -m venv .venv && .venv/bin/pip install -e .[dev]')"
+    current_minor="$(system_python_minor)" || die \
+      "could not determine system python3 version (is python3 installed?)"
+
+    local versioned="${root}/.venv-${current_minor}"
+    local legacy="${root}/.venv"
+
+    local python_bin
+    if python_bin="$(pick_venv "${versioned}" "${current_minor}")"; then
+        exec "${python_bin}" -m epub_deepl "$@"
+    fi
+    if python_bin="$(pick_venv "${legacy}" "${current_minor}")"; then
+        exec "${python_bin}" -m epub_deepl "$@"
     fi
 
-    # Best-effort minor-version compatibility check. If either side cannot be
-    # resolved (missing pyvenv.cfg, exotic Python build), skip the check and
-    # let the subsequent exec speak for itself.
-    expected="$(venv_expected_minor "${pyvenv_cfg}" 2>/dev/null || true)"
-    actual="$(python_actual_minor "${python_bin}" 2>/dev/null || true)"
-    if [[ -n "${expected}" && -n "${actual}" && "${expected}" != "${actual}" ]]; then
-        die "venv at ${root}/.venv was built with Python ${expected}, but '.venv/bin/python' currently resolves to Python ${actual}.
+    die "no virtualenv compatible with Python ${current_minor} found.
+Looked in:
+  - ${versioned}/   (preferred — per-minor venv)
+  - ${legacy}/       (legacy fallback)
 
-Per-minor-version site-packages means the installed packages are unreachable from a mismatched interpreter.
-Most common cause: the venv was created inside the Dev Container (Python ${expected}) and is now being
-invoked from a host with a different Python (${actual}).
+Create one for the current Python:
+  cd '${root}'
+  python3 -m venv '.venv-${current_minor}'
+  '.venv-${current_minor}/bin/pip' install -e '.[dev]'
 
-Two fixes:
-  - Rebuild on the host:   rm -rf '${root}/.venv' && python3 -m venv '${root}/.venv' && '${root}/.venv/bin/pip' install -e '${root}[dev]'
-  - Or invoke via container: devcontainer exec --workspace-folder '${root}' epub-deepl ..."
-    fi
-
-    exec "${python_bin}" -m epub_deepl "$@"
+Or invoke through the Dev Container, which bootstraps its own venv:
+  devcontainer up --workspace-folder '${root}'
+  devcontainer exec --workspace-folder '${root}' epub-deepl ..."
 }
 
 # --- Entry point -------------------------------------------------------------
