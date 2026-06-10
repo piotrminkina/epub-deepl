@@ -72,6 +72,7 @@ markers = [
     "unit: fast, no I/O beyond temp files",
     "integration: synthetic EPUB end-to-end",
     "corpus: requires /tmp/nowe; opt-in",
+    "epubcheck: requires the `epubcheck` binary on PATH (W3C validator); opt-in",
 ]
 
 [tool.coverage.run]

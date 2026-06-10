@@ -15,9 +15,24 @@ set -euo pipefail
 
 readonly WORKSPACE="${PWD}"
 readonly VENV_DIR="${WORKSPACE}/.venv"
+readonly PYVENV_CFG="${VENV_DIR}/pyvenv.cfg"
 
 echo "[post-create] workspace = ${WORKSPACE}"
 echo "[post-create] python    = $(python3 --version)"
+
+# Detect a venv that was built with a different Python minor than the one
+# we run now (e.g. host-built 3.14 venv hitting a container 3.11). The
+# `.venv/lib/pythonX.Y/site-packages/` directory is per-minor; a mismatched
+# venv produces "No module named pip" at the first activation. Lessons-
+# learned G-2.
+if [[ -f "${PYVENV_CFG}" ]]; then
+  expected_minor="$(awk -F' *= *' '/^version *=/ {v=$2; sub(/\.[^.]*$/, "", v); print v; exit}' "${PYVENV_CFG}")"
+  actual_minor="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+  if [[ -n "${expected_minor}" && "${expected_minor}" != "${actual_minor}" ]]; then
+    echo "[post-create] existing venv built for Python ${expected_minor}, current is ${actual_minor}; rebuilding"
+    rm -rf "${VENV_DIR}"
+  fi
+fi
 
 if [[ ! -d "${VENV_DIR}" ]]; then
   echo "[post-create] creating venv at ${VENV_DIR}"

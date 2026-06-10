@@ -18,6 +18,10 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line("markers", "unit: fast, no I/O beyond temp files")
     config.addinivalue_line("markers", "integration: synthetic EPUB end-to-end")
     config.addinivalue_line("markers", "corpus: requires /tmp/nowe; opt-in")
+    config.addinivalue_line(
+        "markers",
+        "epubcheck: requires the `epubcheck` binary on PATH (W3C validator); opt-in",
+    )
 
 
 @pytest.fixture(scope="session")
