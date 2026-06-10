@@ -49,9 +49,11 @@ What the container provides out of the box:
 - Standard utilities for round-trip integrity checks: `unzip`,
   `diffutils`, `git`, `curl`
 
-The `/tmp/nowe` directory is bind-mounted **read-only** into the
-container as the test corpus location. If you keep your EPUB collection
-elsewhere, edit `mounts` in `.devcontainer/devcontainer.json`.
+Corpus EPUBs live in `tests/corpus/` (gitignored except for the
+bundled Project Gutenberg Alice fixture and its README). To run
+corpus tests against your own collection without copying files,
+either drop them into `tests/corpus/` or point at any directory via
+the `EPUB_DEEPL_CORPUS` environment variable.
 
 > **Identity model:** the container runs as a non-root user
 > (`devcontainer`) whose UID is matched to the host at container
@@ -99,14 +101,18 @@ container baseline.
 # Activate the venv matching your current Python (see ADR-0004):
 source ".venv-$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')/bin/activate"
 
-# Fast tests only (unit + synth integration; skips the /tmp/nowe corpus)
+# Fast tests only (unit + synth integration; skips the corpus)
 pytest
 
 # Full suite including corpus parametrization
 pytest -m 'not corpus or corpus'
 
-# Just the corpus parametrization (slow; requires /tmp/nowe populated)
+# Just the corpus parametrization (requires tests/corpus/ populated,
+# or set EPUB_DEEPL_CORPUS to point at your own EPUB directory)
 pytest -m corpus
+
+# Same, against an out-of-tree corpus
+EPUB_DEEPL_CORPUS=/path/to/library pytest -m corpus
 
 # Single file
 pytest tests/unit/test_anchor_resolution.py -v
@@ -116,8 +122,9 @@ pytest tests/unit/test_anchor_resolution.py::test_resolve_label_with_fragment -v
 ```
 
 The suite has 118 tests as of MVP v1, totalling under 10 seconds with
-the corpus enabled. The corpus path skips gracefully when `/tmp/nowe`
-is absent or empty, so the suite remains runnable on any machine.
+the corpus enabled. Corpus tests skip gracefully when the corpus
+directory is absent or empty, so the suite remains runnable on any
+machine.
 
 ### Coverage
 
@@ -175,13 +182,13 @@ before each release:
 # Round-trip-without-translation should produce zero new errors.
 # --lang is unnecessary when the merged HTML still carries the original
 # source language; pass it explicitly to force a different value.
-epub-deepl prepare /tmp/nowe/<book>.epub
-epub-deepl restore /tmp/nowe/<book>.epub \
-    /tmp/nowe/<book>.prepare.html \
-    --output /tmp/<book>.translated.epub
+epub-deepl prepare tests/corpus/alice-pg11.epub
+epub-deepl restore tests/corpus/alice-pg11.epub \
+    tests/corpus/alice-pg11.prepare.html \
+    --output /tmp/alice.translated.epub
 
-epubcheck /tmp/nowe/<book>.epub                  # baseline
-epubcheck /tmp/<book>.translated.epub             # after round-trip
+epubcheck tests/corpus/alice-pg11.epub  # baseline
+epubcheck /tmp/alice.translated.epub     # after round-trip
 ```
 
 The drift warning emitted on round-trip-without-translation is expected

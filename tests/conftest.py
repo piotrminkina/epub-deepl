@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import pathlib
 import tempfile
 from collections.abc import Callable
@@ -10,14 +11,26 @@ import pytest
 
 from tests.fixtures.minimal import XhtmlSpec, build_minimal_epub
 
-CORPUS_DIR = pathlib.Path("/tmp/nowe")
+# Corpus directory resolution:
+#   1. EPUB_DEEPL_CORPUS env var (absolute or repo-relative) if set
+#   2. tests/corpus/ inside the repo (bundles at least the Project
+#      Gutenberg Alice fixture; users may drop their own EPUBs here)
+#
+# The directory is treated as opt-in: missing or empty → corpus tests
+# skip cleanly without affecting the rest of the suite.
+_DEFAULT_CORPUS = pathlib.Path(__file__).resolve().parent / "corpus"
+CORPUS_DIR = pathlib.Path(os.environ.get("EPUB_DEEPL_CORPUS", str(_DEFAULT_CORPUS)))
 
 
 def pytest_configure(config: pytest.Config) -> None:
     """Register custom markers."""
     config.addinivalue_line("markers", "unit: fast, no I/O beyond temp files")
     config.addinivalue_line("markers", "integration: synthetic EPUB end-to-end")
-    config.addinivalue_line("markers", "corpus: requires /tmp/nowe; opt-in")
+    config.addinivalue_line(
+        "markers",
+        "corpus: requires real EPUB files (default: tests/corpus/, override "
+        "with EPUB_DEEPL_CORPUS env var); opt-in",
+    )
     config.addinivalue_line(
         "markers",
         "epubcheck: requires the `epubcheck` binary on PATH (W3C validator); opt-in",

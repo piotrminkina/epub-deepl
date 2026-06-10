@@ -25,13 +25,9 @@
   "workspaceFolder": "${localWorkspaceFolder}",
   "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind,consistency=cached",
 
-  "mounts": [
-    "source=/tmp/nowe,target=/tmp/nowe,type=bind,readonly"
-  ],
-
   "remoteEnv": {
-    "VIRTUAL_ENV": "${localWorkspaceFolder}/.venv",
-    "PATH": "${localWorkspaceFolder}/.venv/bin:${containerEnv:PATH}",
+    "VIRTUAL_ENV": "${localWorkspaceFolder}/.venv-3.11",
+    "PATH": "${localWorkspaceFolder}/.venv-3.11/bin:${containerEnv:PATH}",
     "PYTHONDONTWRITEBYTECODE": "1",
     "PYTHONUNBUFFERED": "1"
   },

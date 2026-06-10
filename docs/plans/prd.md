@@ -501,7 +501,7 @@ includes media types the tool cannot bundle (e.g. DTBook, legacy HTML).
 
 | ID | Metric | Target | Measurement |
 |---|---|---|---|
-| SM-1 | Round-trip integrity (no translation) | 100% of test corpus | Composite check: (a) `diff -r` of unzipped EPUBs shows no content differences for all 4 books in `/tmp/nowe`; (b) output ZIP has `mimetype` as first entry, STORED, `flag_bits=0`, no extra-field bytes; (c) all other entries DEFLATED; (d) output passes `zipfile.ZipFile.testzip()` |
+| SM-1 | Round-trip integrity (no translation) | 100% of test corpus | Composite check: (a) `diff -r` of unzipped EPUBs shows no content differences for all 4 books in the corpus directory; (b) output ZIP has `mimetype` as first entry, STORED, `flag_bits=0`, no extra-field bytes; (c) all other entries DEFLATED; (d) output passes `zipfile.ZipFile.testzip()` |
 | SM-2 | Translation completeness | 100% of translatable fields | Manual inspection: every `<dc:title>`, `<dc:description>`, `<dc:subject>`, chapter heading, paragraph, `alt`/`title`/`aria-label` is in the target language after DeepL round-trip |
 | SM-3 | TOC ↔ heading consistency | Byte-equal after whitespace normalization | For each `<navLabel><text>`, the value equals the resolved target element's normalized text content |
 | SM-4 | EPUB validity | Output passes `epubcheck` | Run `epubcheck` on all 4 test books after round-trip-without-translation; no errors |

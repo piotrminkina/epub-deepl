@@ -119,7 +119,7 @@ external command invocation in MVP), `urllib` (no network), `os.system`
 
 ### Fixtures and test data
 
-- The 4 EPUBs in `/tmp/nowe/` are read-only inputs to integration tests via
+- The 4 EPUBs in `tests/corpus/` are read-only inputs to integration tests via
   a shared fixture (`conftest.py`).
 - A minimal synthetic EPUB (~5 XHTML files, NCX, OPF) generated at
   collection time for fast unit-level structural assertions, avoiding the

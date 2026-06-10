@@ -16,7 +16,7 @@ The test suite validates two properties simultaneously:
 
 The suite is layered: fast unit tests for individual algorithms, integration
 tests for end-to-end CLI behaviour, and corpus tests against real-world
-EPUBs in `/tmp/nowe`.
+EPUBs in the corpus directory.
 
 **Coverage target:** ≥ 85% statement coverage across `src/`, with 100%
 coverage on `epub/validator.py` and `epub/writer.py` (the highest-risk
@@ -30,7 +30,7 @@ modules).
                 ┌──────────────────────────┐
                 │   Manual: epubcheck      │   ← out-of-band, user-run
                 ├──────────────────────────┤
-                │   Integration (corpus)   │   ← /tmp/nowe books, slow
+                │   Integration (corpus)   │   ← corpus books, slow
                 ├──────────────────────────┤
                 │   Integration (CLI)      │   ← argparse → exit code
                 ├──────────────────────────┤
@@ -61,7 +61,7 @@ Total: ~105 tests, < 90 s wall-clock with `pytest-xdist`.
 
 ### Fixtures (`tests/conftest.py`)
 
-- `corpus_dir`: session-scoped `Path` to `/tmp/nowe`; skips integration
+- `corpus_dir`: session-scoped `Path` to the corpus directory; skips integration
   corpus tests if directory missing or contains no `.epub` files.
 - `corpus_epubs`: parametrized fixture yielding each `.epub` file in
   corpus, with a clear `id` (book filename) for test report readability.
@@ -97,7 +97,7 @@ edge cases.
 
 - `@pytest.mark.unit` — default; fast.
 - `@pytest.mark.integration` — uses synthetic EPUB.
-- `@pytest.mark.corpus` — uses `/tmp/nowe`; runnable only when corpus is
+- `@pytest.mark.corpus` — uses the corpus directory; runnable only when corpus is
   present; deselected by default in `pyproject.toml` to keep `pytest`
   invocation fast unless `pytest -m corpus` or `pytest -m ''` is used.
 
@@ -116,7 +116,7 @@ stories, but every criterion must be explicitly asserted somewhere.
 | US-003 | `unit/test_validator.py` | `test_validate_rejects_drm_protected_epub` | Unit |
 | US-004 | `unit/test_validator.py` | `test_validate_rejects_manifest_with_missing_file`, `test_validate_lists_all_missing_files` | Unit |
 | US-005 | `unit/test_validator.py` | `test_validate_rejects_spine_with_unresolved_idref` | Unit |
-| US-006 | `integration/test_roundtrip.py` | `test_roundtrip_without_translation_is_content_identical[corpus]` (parametrized across `/tmp/nowe`), `test_roundtrip_without_translation_synth_minimal`, `test_roundtrip_without_translation_synth_with_nested_ncx`, `test_roundtrip_without_translation_synth_with_mathml` | Integration (synth + corpus) |
+| US-006 | `integration/test_roundtrip.py` | `test_roundtrip_without_translation_is_content_identical[corpus]` (parametrized across the corpus directory), `test_roundtrip_without_translation_synth_minimal`, `test_roundtrip_without_translation_synth_with_nested_ncx`, `test_roundtrip_without_translation_synth_with_mathml` | Integration (synth + corpus) |
 | US-007 | `integration/test_cli.py` | `test_restored_opf_has_translated_metadata` (shared with US-002), `test_restored_metadata_subject_count_preserved` | Integration |
 | US-008 | `unit/test_anchor_resolution.py` | `test_resolve_label_with_fragment`, `test_resolve_label_without_fragment_uses_first_heading`, `test_resolve_label_no_fragment_no_heading_falls_back_to_flat_label`, `test_resolve_label_per_file_scoping_prevents_id_collisions`, `test_resolve_label_normalizes_whitespace` | Unit |
 | US-009 | `unit/test_opf.py` | `test_opf_set_language_replaces_first_dc_language`, `test_opf_set_language_removes_extras_when_multiple_present` | Unit |
@@ -138,7 +138,7 @@ stories, but every criterion must be explicitly asserted somewhere.
 | SM-1 | Round-trip integrity (no translation) on full corpus | Yes | `test_roundtrip_without_translation_is_content_identical[corpus]` |
 | SM-2 | Translation completeness | Partial; structural integrity automated, translation completeness verified by `simulated_translation` fixture (deterministic regex replacement) and manual sampling on real DeepL output | `test_simulated_translation_completeness` |
 | SM-3 | TOC ↔ heading consistency (byte-equal, normalized whitespace) | Yes | `test_navlabel_matches_heading_text_after_simulated_translation` |
-| SM-4 | EPUB validity via `epubcheck` | Manual | Documented recipe in `tests/integration/README.md`; CI integration deferred |
+| SM-4 | EPUB validity via `epubcheck` | Automated (`@pytest.mark.epubcheck`) + manual recipe in CONTRIBUTING | CI job exercises the marker against synthetic fixtures |
 | SM-5 | DeepL quota economy (1 doc per book) | Manual | Documented as user-observable property; no test |
 | SM-6 | CLI turnaround < 60 s | Yes | `test_cli_turnaround_per_book[corpus]` with `pytest-benchmark` or simple `time.monotonic()` wrapper |
 
@@ -340,7 +340,7 @@ faster runs.
 - `test_roundtrip_without_translation_synth_with_ruby`
 - `test_roundtrip_without_translation_synth_with_extension_namespaces`
 - `test_roundtrip_without_translation_is_content_identical[corpus]`
-  *(parametrized over `/tmp/nowe/*.epub`)*
+  *(parametrized over `tests/corpus/*.epub`)*
 - `test_zip_packaging_invariants_hold_after_roundtrip[corpus]`
   *(critical — closes C-1: asserts mimetype-first, STORED, flag_bits=0,
    no extras, DEFLATED tail, on every roundtrip output)*
@@ -396,18 +396,30 @@ Generated on demand via factory parameters:
 
 ### Corpus
 
-`/tmp/nowe/`:
+`tests/corpus/` is the default corpus directory (overridable via the
+`EPUB_DEEPL_CORPUS` environment variable). The repo bundles one
+real-world fixture from Project Gutenberg
+(`alice-pg11.epub`, ~137 KB, EPUB 2.0 + NCX) as a baseline proof
+that the tool round-trips against an actual publisher pipeline.
 
-- `Build_a_Large_Language_Model_(From_Scrat.epub` (technical, dense)
-- `Build_a_Reasoning_Model_(From_Scratch)_v8.epub` (technical, dense)
-- `Messenger, Shannon - Keeper of the Lost Cities 04 - Neverseen.epub` (novel, long)
-- `Test Yourself on Sebastian Raschka's Build a Large Language Model (From Scratch) - Sebastian Raschka.epub` (workbook)
+Contributors are encouraged to drop additional EPUB 2 + NCX books
+into `tests/corpus/` to broaden coverage — different genres
+(novels, technical books, workbooks), different publisher pipelines
+(Manning, O'Reilly, Calibre-generated, etc.), and different
+production tooling all exercise different edge cases. See
+[`tests/corpus/README.md`](../../tests/corpus/README.md) for license
+and content guidance.
 
-Diverse: 2 technical, 1 novel, 1 workbook. All EPUB 2.0 + NCX (verified).
+During pre-publication development the corpus was a local 4-book
+collection (mixed technical / novel / workbook genres from
+Manning/Leanpub pipelines). The empirical findings from those
+round-trips are recorded in
+[`docs/lessons-learned.md`](../lessons-learned.md) §"DeepL behavior
+catalog".
 
-Corpus tests skip with a clear message if `/tmp/nowe` is absent or empty,
-so the suite remains runnable on any machine without the user's local
-test data.
+Corpus tests skip with a clear message if the corpus directory is
+absent or empty, so the suite remains runnable on any machine
+without local test data.
 
 ---
 
@@ -426,8 +438,8 @@ required pre-release manual steps:
    (data-* survives translation) on actual DeepL servers, not just
    simulated.
 
-These are documented in `tests/integration/README.md` with exact
-commands and expected outcomes.
+The exact commands and expected outcomes live in
+[`CONTRIBUTING.md`](../../CONTRIBUTING.md#manual-epub-validation).
 
 ---
 
@@ -452,7 +464,7 @@ addopts = "-ra -q --strict-markers -m 'not corpus'"
 markers = [
   "unit: fast, no I/O beyond temp files",
   "integration: synthetic EPUB end-to-end",
-  "corpus: requires /tmp/nowe; opt-in",
+  "corpus: requires tests/corpus/ (override via EPUB_DEEPL_CORPUS env var); opt-in",
 ]
 ```
 

@@ -67,7 +67,7 @@ epub-deepl/
     │   ├── test_zip_packaging.py
     │   └── test_validator.py
     └── integration/
-        ├── test_roundtrip.py  ← /tmp/nowe corpus
+        ├── test_roundtrip.py  ← corpus
         └── test_cli.py
 ```
 
