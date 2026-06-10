@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "epub-deepl"
 version = "0.1.0"
-description = "Prepare EPUB files for round-trip translation via DeepL"
+description = "Translate an EPUB through DeepL with maximum structural fidelity to the original"
 requires-python = ">=3.11"
 dependencies = ["lxml>=5.0"]
 

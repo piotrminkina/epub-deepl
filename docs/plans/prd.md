@@ -9,41 +9,61 @@
 
 ## 1. Product Overview
 
-`epub-deepl` is a Python CLI tool that prepares an EPUB file for
-translation by bundling all human-facing content into a single HTML5 document
-suitable for upload to DeepL's HTML document translation, and then reassembles
-the translated HTML back into a structurally identical EPUB.
+`epub-deepl` is a Python CLI that translates an EPUB through DeepL with
+**maximum structural fidelity to the original**. The translated book
+reads in any e-reader exactly like the source minus the translated text:
+TOC labels track chapter headings, manifest and spine survive
+byte-for-byte, embedded SVG attribute case is preserved, non-ASCII
+characters round-trip cleanly through Unicode.
 
-The tool is invoked as two subcommands of a single binary:
+Mechanically, the tool bundles all human-facing content (XHTML body
+text, OPF metadata, NCX navigation labels) into a single HTML5
+document for upload to DeepL's document-translation feature, then
+reassembles a structurally-identical EPUB from the translated HTML
+using the original EPUB as the structural template.
+
+Two subcommands of a single binary:
 
 - `prepare <input.epub>` — produces a single HTML payload for translation.
-- `restore <input.epub> <translated.html> --lang <code>` — produces the
-  translated EPUB, reusing the original EPUB as a structural template.
+- `restore <input.epub> <translated.html> [--lang <code>]` — produces
+  the translated EPUB, reusing the original EPUB as a structural template.
 
-The MVP targets EPUB 2.0.1 books with NCX-based navigation (the format of the
-user's existing corpus). EPUB 3 with `nav.xhtml` is out of MVP scope.
+The MVP targets EPUB 2.0.1 books with NCX-based navigation (the format
+the maintainer's corpus is in). EPUB 3 with `nav.xhtml` is out of MVP
+scope.
 
 ---
 
 ## 2. User Problem
 
-The user is an individual reader with a DeepL Pro Starter subscription, which
-grants 5 document translations per month. A single EPUB typically contains
-10–50 separate XHTML files plus an OPF manifest and NCX navigation file.
+The user wants to translate an EPUB through a per-document translation
+service (DeepL) while keeping the result **structurally faithful to the
+original** — TOC, manifest, spine, NCX, embedded SVG, and Unicode
+encoding all intact, so the translated book reads in any e-reader
+exactly like the source minus the translated text.
 
-Two failure modes exist for naive workflows:
+A single EPUB typically contains 10–50 separate XHTML files plus an
+OPF manifest and an NCX navigation file. The naive workflow (unzip,
+translate each file separately, repackage by hand) is expensive on
+three axes:
 
-1. **Quota exhaustion.** Uploading each XHTML file as its own DeepL document
-   consumes the monthly quota in a single book.
-2. **Structural loss.** Extracting text-only content, translating, then
-   manually reassembling drops the table of contents, image metadata,
-   per-chapter `<title>` elements, OPF metadata, and cross-file link
-   integrity. Reassembling a valid EPUB by hand is error-prone and slow.
+1. **Structural fragility.** Manual reassembly drops the table of
+   contents, mis-orders the spine, breaks cross-file links, mangles
+   OPF metadata or NCX navigation, and easily produces an EPUB that
+   fails `epubcheck` or renders incorrectly in real readers.
+   Producing a valid EPUB by hand is error-prone and slow.
+2. **Operator time.** Tens of file-by-file upload, download, and
+   reassembly cycles per book.
+3. **Translation-job count.** Per-document translation services
+   charge once per file. With DeepL Pro Starter's 5-documents-per-
+   month limit, an EPUB with ~20 XHTMLs exhausts the quota on a
+   single book.
 
-The user needs a deterministic round-trip: many XHTML files in → one HTML
-document → translate externally → one HTML document → many XHTML files out,
-with full preservation of every structural element that the e-reader exposes
-to the reader.
+The user needs a deterministic round-trip: many XHTML files in → one
+HTML document → translate externally → one HTML document → many XHTML
+files out, with full preservation of every structural element the
+e-reader exposes to the reader, and a single quota-counter increment
+per book as a consequence.
 
 ---
 
@@ -505,7 +525,7 @@ includes media types the tool cannot bundle (e.g. DTBook, legacy HTML).
 | SM-2 | Translation completeness | 100% of translatable fields | Manual inspection: every `<dc:title>`, `<dc:description>`, `<dc:subject>`, chapter heading, paragraph, `alt`/`title`/`aria-label` is in the target language after DeepL round-trip |
 | SM-3 | TOC ↔ heading consistency | Byte-equal after whitespace normalization | For each `<navLabel><text>`, the value equals the resolved target element's normalized text content |
 | SM-4 | EPUB validity | Output passes `epubcheck` | Run `epubcheck` on all 4 test books after round-trip-without-translation; no errors |
-| SM-5 | DeepL quota economy | 1 document per book | Each book consumed exactly 1 of the 5/month Pro Starter slots |
+| SM-5 | Translation-job economy | 1 DeepL document per book | One translator upload per book regardless of plan. Under DeepL Pro Starter's 5-documents-per-month limit, that means roughly 5 books/month — vs ~1 book per month under per-XHTML translation. |
 | SM-6 | CLI turnaround | < 60 s combined `prepare` + `restore` per book | Wall-clock measurement on the largest book in the test corpus |
 | SM-7 | R-8 regression coverage | Adversarial fixture exists and passes | Automated test simulates DeepL stripping `data-*` attributes, reordering attributes, and collapsing whitespace; restore must either succeed or fail with a precise diagnostic (not crash, not corrupt output) |
 

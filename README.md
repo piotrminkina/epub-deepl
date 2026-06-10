@@ -5,16 +5,27 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-d7ff64)](https://docs.astral.sh/ruff/)
 
-A Python CLI that bundles all human-facing content of an EPUB into **a single
-HTML document** suitable for DeepL's document-translation feature, then
-reassembles the translated HTML back into a **structurally identical EPUB**.
+A Python CLI that translates an EPUB through DeepL with **maximum
+structural fidelity to the original**. The translated book reads in any
+e-reader exactly like the source minus the translated text — TOC labels
+match chapter headings, manifest and spine are byte-for-byte equivalent,
+embedded SVG attributes survive, non-ASCII characters round-trip cleanly
+through Unicode.
 
-The motivation is economy: DeepL Pro Starter grants 5 document translations
-per month, but an EPUB contains 10–50 separate XHTML files. Translating each
-separately exhausts the monthly quota on a single book. This tool reduces a
-book to one DeepL document while preserving the table of contents, OPF
-metadata, NCX navigation, manifest, spine, and all non-translated structural
-identifiers.
+The naive alternative — unzip the EPUB, translate each XHTML separately,
+repackage by hand — is expensive on three axes that this tool collapses
+into a single upload/download cycle per book:
+
+1. **Structural fragility.** Manual reassembly drops the TOC,
+   mis-orders the spine, breaks cross-file links, mangles OPF metadata
+   or NCX navigation. Producing a valid EPUB by hand is error-prone
+   and slow.
+2. **Operator time.** Tens of file-by-file upload/download cycles
+   per book.
+3. **Translation-job count.** Per-document translation services
+   (e.g. DeepL Pro Starter, with its 5-documents-per-month limit)
+   charge once per file. An EPUB with 10–50 XHTMLs exhausts the
+   monthly quota on one book; this tool spends one document per book.
 
 **Status:** working MVP, no versioned release cut yet. Targets EPUB 2.0
 with NCX-based navigation. EPUB 3 + `nav.xhtml` is out of scope for now.
