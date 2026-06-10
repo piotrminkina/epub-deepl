@@ -32,7 +32,7 @@ double-encoding mojibake.
 fallback. Documents that declare their own charset override this; the
 fallback only activates when no declaration is present.
 
-**Why it slipped past 164 tests:** synthetic and corpus EPUBs were
+**Why the test suite missed it:** synthetic and corpus EPUBs were
 ASCII-only. The bug only manifests on non-ASCII characters in body
 fragments. Regression test added:
 `test_replace_body_preserves_non_ascii_utf8`.

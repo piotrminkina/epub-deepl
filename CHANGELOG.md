@@ -5,86 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+No versioned release has been cut yet — everything below is part of
+the **Unreleased** working set. The maintainer will move entries under
+a versioned heading (e.g. `## [0.1.0]`) when an intentional release is
+tagged.
+
 ## [Unreleased]
 
 ### Added
 
-- **CI workflow** (GitHub Actions). Matrix-tests `ruff check`,
-  `ruff format`, `mypy --strict`, and pytest across Python 3.11 / 3.12 /
-  3.13. Separate job installs JRE 17 + a hash-pinned `epubcheck` and
-  runs the `@pytest.mark.epubcheck` synthetic-fixture tests.
-- **Automated `epubcheck` zero-drift tests** (`@pytest.mark.epubcheck`).
-  Asserts that round-tripping any EPUB without translation produces
-  identical fatal/error/warning counts under W3C `epubcheck`. Promotes
-  SM-4 from a manual recipe to a regression gate.
-- **Non-ASCII end-to-end policy test**. Synthetic EPUB with Polish,
-  CJK, and Cyrillic content in metadata + headings + body; asserts
-  byte-exact preservation through the full CLI pipeline. Closes the
-  test-corpus monoculture gap from `lessons-learned.md` P-2.
-- **3 ADRs** in `docs/adr/`: original-EPUB-as-state, BCP 47
-  pass-through, centralized parser factory.
-- **`docs/lessons-learned.md`** capturing real-world gotchas
-  (G-1..G-4), empirical DeepL behaviour catalog, and process
-  retrospective (P-1..P-5).
-- **`bin/epub-deepl`** launcher that self-locates the project
-  venv and detects Python minor-version mismatch with an actionable
-  diagnostic.
-- **CONTRIBUTING.md** with the Dev Container workflow, quality gates,
-  and code style conventions.
-
-### Changed
-
-- **`--lang` is now optional**. Restore auto-detects the target
-  language from the translated HTML's `<html lang>` attribute and
-  passes the value verbatim to OPF `<dc:language>`. Both surfaces use
-  BCP 47, so no normalization is performed. Pass `--lang CODE`
-  explicitly to override. Drift warning when the chosen primary
-  subtag matches the source EPUB's. (See [ADR-0002](docs/adr/0002-bcp47-passthrough.md).)
-- **Project renamed** from `epub-translation-prepare` to
-  `epub-deepl`. Package, CLI, module, and devcontainer
-  identifiers updated; display name "EPUB DeepL" on
-  human-facing surfaces.
-- **README split into user-facing README + CONTRIBUTING.md**. README
-  no longer requires the Dev Container to run the tool.
-
-### Fixed
-
-- **UTF-8 mojibake on non-ASCII body content**. `lxml.html.HTMLParser`
-  was defaulting to ISO-8859-1 (HTML4 historical) when parsing the
-  body-fragment wrapper, double-encoding Polish/CJK/Cyrillic bytes
-  through Latin-1. Set `encoding="utf-8"` as the safe HTML parser's
-  fallback. (`fed9a6d`)
-- **SVG/MathML attribute case loss**. DeepL lowercases `viewBox` /
-  `preserveAspectRatio` etc.; epubcheck rejects the result. Added
-  `epub/_svg_case.py` with a closed enumeration of 57 case-sensitive
-  attributes; restored before serialization. (`7c84805`)
-- **Devcontainer venv self-healing**. `post-create.sh` detects a venv
-  built with a different Python minor than the current interpreter
-  and rebuilds, preventing a "No module named pip" crash on
-  host↔container handoffs. (`2b0093a`)
-
-### Security
-
-- `.devcontainer/Dockerfile` pins `epubcheck-5.1.0.zip` by SHA256
-  (`74a59af8…`) — supply-chain integrity for the third-party JAR.
-  (`a28ee38`)
-
-## [0.1.0] — Initial MVP
-
-Round-trip pipeline EPUB ↔ HTML for DeepL document translation.
-
-### Added
-
-- **`prepare`**: bundle every XHTML in the OPF spine into a single
-  HTML5 document with `<section data-source-href="…" data-spine-idx="N">`
-  markers, OPF metadata block, and NCX nav block carrying `data-*`
-  state for restore.
-- **`restore`**: reassemble the translated EPUB using the original as
-  the structural template (see
+- **CLI: `prepare` subcommand.** Bundles every XHTML in the OPF spine
+  into a single HTML5 document with `<section data-source-href="…"
+  data-spine-idx="N">` markers, an OPF metadata block, and an NCX nav
+  block carrying `data-*` state for restore.
+- **CLI: `restore` subcommand.** Reassembles the translated EPUB using
+  the original EPUB as the structural template (see
   [ADR-0001](docs/adr/0001-original-epub-as-state.md)). Reconstructs
   each XHTML body, mutates OPF `<dc:title>` / `<dc:description>` /
-  `<dc:subject>` / `<dc:language>`, and rebuilds NCX `<navLabel>`
-  text via anchor resolution against restored chapter headings.
+  `<dc:subject>` / `<dc:language>`, and rebuilds NCX `<navLabel>` text
+  via anchor resolution against restored chapter headings.
 - **Input validator** (FR-4): fail-fast on DRM, broken manifest,
   broken spine, non-XHTML spine items, missing NCX, input==output
   path collision, output exists without `--force`.
@@ -93,14 +32,105 @@ Round-trip pipeline EPUB ↔ HTML for DeepL document translation.
 - **Centralized lxml parser factory** (`epub/_safe_parser.py`) with
   XXE/billion-laughs/DTD/network defaults applied uniformly. See
   [ADR-0003](docs/adr/0003-centralized-parser-factory.md).
-- **Dev Container** based on `debian:bookworm-slim` with Python 3.11,
-  lxml build dependencies, hash-pinned epubcheck, and a non-root user
-  (`devcontainer`) whose UID is matched to the host at container
-  creation via `common-utils` (no UID 1000 hardcoded).
-- **Test suite**: 118 unit + synth integration + corpus tests at
-  initial release; grew to 175+ over the unreleased window.
-- **Planning artifacts** in `docs/plans/`: PRD, tech-stack, tech-spec,
-  test-plan, devils-advocate review.
+- **Per-Python-minor venv naming** (`.venv-${PY_MINOR}/`) — see
+  [ADR-0004](docs/adr/0004-per-python-minor-venv.md). Host and
+  container coexist without `.venv/` conflicts; `bin/epub-deepl`
+  launcher picks the venv whose declared minor matches the current
+  `python3`.
+- **`bin/epub-deepl` launcher.** Self-locates the project root and
+  execs the matching venv's Python with the CLI module. No
+  `source activate` required; helpful error when no compatible venv
+  exists.
+- **Dev Container** based on `debian:bookworm-slim`. Python 3.11 + all
+  `lxml` C-extension build deps + a SHA256-pinned `epubcheck` + non-root
+  `devcontainer` user with UID matched to the host at creation time
+  (no UID 1000 hardcoded). `common-utils` feature handles user setup
+  and zsh.
+- **Automated `epubcheck` zero-drift tests** (`@pytest.mark.epubcheck`).
+  Asserts that round-tripping any EPUB without translation produces
+  identical fatal/error/warning counts under W3C `epubcheck`. Promotes
+  SM-4 from a manual recipe to a regression gate.
+- **Non-ASCII end-to-end policy test.** Synthetic EPUB with Polish,
+  CJK, and Cyrillic content in metadata + headings + body; asserts
+  byte-exact preservation through the full CLI pipeline. Closes the
+  test-corpus monoculture gap.
+- **Portable test corpus.** `tests/corpus/alice-pg11.epub` bundled
+  from Project Gutenberg (public domain, EPUB 2.0 + NCX) as the
+  default real-world fixture. Override with the `EPUB_DEEPL_CORPUS`
+  environment variable.
+- **GitHub Actions CI.** Quality matrix on Python 3.11 / 3.12 / 3.13
+  (ruff lint + format + mypy --strict + pytest). Separate job
+  installs JRE 17 + SHA256-pinned `epubcheck` and runs the
+  `@pytest.mark.epubcheck` synthetic-fixture tests. Concurrency
+  group cancels superseded runs; least-privilege `permissions:
+  contents: read`; per-job `timeout-minutes`.
+- **Dependabot config** for the `github-actions` ecosystem with
+  monthly grouped updates (`actions-minor-patch` + `actions-major`
+  groups) to keep PR noise low.
+- **`docs/lessons-learned.md`** capturing real-world gotchas
+  (lxml Latin-1 default, per-minor venv layout, DeepL SVG-case
+  lowering, identical-string translation drift), an empirical DeepL
+  behaviour catalog, and a process retrospective.
+- **`docs/adr/`** for architecture decisions:
+  - ADR-0001: original EPUB as restore-time structural template
+  - ADR-0002: BCP 47 pass-through between `<html lang>` and
+    `<dc:language>`
+  - ADR-0003: centralized lxml parser factory
+  - ADR-0004: per-Python-minor venv naming
+- **`docs/plans/`** for forward-looking design artifacts (PRD,
+  tech-stack, tech-spec, test-plan).
+- **CONTRIBUTING.md** with Dev Container + Native dev setup, quality
+  gates, manual-validation recipe, project layout, atomic-commit
+  conventions, and an issue-reporting checklist.
+- **`.github/ISSUE_TEMPLATE/`** (bug + feature forms) and
+  **`pull_request_template.md`** enforcing the quality-gate
+  checklist.
 
-[Unreleased]: https://github.com/piotrminkina/epub-deepl/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/piotrminkina/epub-deepl/releases/tag/v0.1.0
+### Changed
+
+- **Project renamed** from `epub-translation-prepare` →
+  `epub-deepl-prepare` → `epub-deepl`. The first rename made the
+  translation backend (DeepL) explicit in the name; the second
+  removed the redundant `-prepare` suffix so the CLI reads
+  `epub-deepl prepare` / `epub-deepl restore` symmetrically.
+- **`--lang` is now optional** on `restore`. The target language is
+  auto-detected from the translated HTML's `<html lang>` attribute
+  and passed verbatim to OPF `<dc:language>` (both surfaces use
+  BCP 47, so no normalisation is performed). Pass `--lang CODE`
+  explicitly to override. Drift warning when the chosen primary
+  subtag matches the source EPUB's. See
+  [ADR-0002](docs/adr/0002-bcp47-passthrough.md).
+- **README split into a user-facing README and a contributor-facing
+  CONTRIBUTING.md.** The user path no longer requires the Dev
+  Container; install via `pip install -e .` works on any host with
+  Python 3.11+ and the `lxml` build deps.
+
+### Fixed
+
+- **UTF-8 mojibake on non-ASCII body content.** `lxml.html.HTMLParser`
+  was defaulting to ISO-8859-1 (HTML4 historical) when parsing the
+  body-fragment wrapper, double-encoding Polish/CJK/Cyrillic bytes
+  through Latin-1. Set `encoding="utf-8"` as the safe HTML parser's
+  fallback.
+- **SVG/MathML attribute case loss.** DeepL lowercases `viewBox` /
+  `preserveAspectRatio` etc.; `epubcheck` rejects the result. Added
+  `epub/_svg_case.py` with a closed enumeration of case-sensitive
+  SVG/MathML attribute names; restored before serialisation.
+- **`bin/epub-deepl` Python version-mismatch diagnostic.** When the
+  selected venv's Python minor does not match the system `python3`,
+  the launcher emits a precise, actionable error rather than the
+  bare `No module named …` Python would otherwise produce. Now
+  fully obsolete after per-minor venv naming landed (ADR-0004), but
+  the safety net remains.
+
+### Security
+
+- **`.devcontainer/Dockerfile` pins `epubcheck-5.1.0.zip` by SHA256**
+  (`74a59af8…`) — supply-chain integrity for the third-party JAR.
+- **CI workflow uses least-privilege `permissions: contents: read`**
+  and per-job `timeout-minutes` to bound a runaway job's quota
+  consumption.
+- **Centralized XXE-safe parser factory** disables external entity
+  resolution, DTD loading, and network access on every XML parse
+  path. Enforced by a unit test that greps the codebase for bare
+  parser instantiation outside `epub/_safe_parser.py`.

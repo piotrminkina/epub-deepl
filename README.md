@@ -163,12 +163,12 @@ Full requirements with user stories: [`docs/plans/prd.md`](docs/plans/prd.md).
 
 ## Project Status
 
-**MVP draft v1.** Tested against a 4-EPUB corpus (technical, novel,
-workbook genres; all EPUB 2.0 + NCX). 175 unit + integration tests pass;
-full corpus round-trip preserves the `epubcheck` baseline (0 errors in →
-0 errors out). Real-DeepL spike completed: one full Polish translation
-of a 22-chapter / 114-navPoint book round-tripped cleanly, R-8 (DeepL
-preserves `data-*` attributes) empirically validated.
+**MVP working set, no versioned release yet.** Validated against a
+diverse EPUB 2.0 + NCX corpus (technical, novel, workbook genres).
+Full corpus round-trip preserves the `epubcheck` baseline (zero new
+errors introduced by the tool). Real-DeepL spike completed: one full
+Polish translation round-tripped cleanly, R-8 (DeepL preserves
+`data-*` attributes) empirically validated.
 
 CI matrix tests Python 3.11 / 3.12 / 3.13 on every push and PR; a
 dedicated CI job re-runs the synthetic `epubcheck` zero-drift tests

@@ -121,10 +121,10 @@ pytest tests/unit/test_anchor_resolution.py -v
 pytest tests/unit/test_anchor_resolution.py::test_resolve_label_with_fragment -v
 ```
 
-The suite has 118 tests as of MVP v1, totalling under 10 seconds with
-the corpus enabled. Corpus tests skip gracefully when the corpus
-directory is absent or empty, so the suite remains runnable on any
-machine.
+The full suite runs in under a minute on a developer laptop. Corpus
+tests skip gracefully when the corpus directory is absent or empty,
+so the suite remains runnable on any machine without preparing real
+EPUB fixtures.
 
 ### Coverage
 
