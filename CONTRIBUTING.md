@@ -218,15 +218,18 @@ enough that local consistency is the right baseline.
 .
 ├── .devcontainer/                 Dev Container definition (Dockerfile,
 │                                  devcontainer.json, post-create.sh)
-├── bin/                           Bash CLI launcher (self-locating venv)
-├── docs/plans/                    Design and decision artifacts
-│   ├── prd.md                     Product requirements (US-001..US-020,
-│   │                              SM-1..SM-7)
-│   ├── tech-stack.md              Technology choices, alternatives
-│   ├── tech-spec.md               Internal architecture, data model,
-│   │                              flows, anchor resolution, ZIP rules
-│   ├── test-plan.md               Test pyramid, fixtures, coverage matrix
-│   └── devils-advocate-review.md  Critical findings + adversarial review
+├── bin/                           Bash CLI launcher (per-Python-minor venv)
+├── docs/
+│   ├── adr/                       Architecture Decision Records
+│   ├── lessons-learned.md         Operational gotchas, DeepL behaviour
+│   │                              catalog, process retrospective
+│   └── plans/                     Forward-looking design artifacts
+│       ├── prd.md                 Product requirements (US-001..US-020,
+│       │                          SM-1..SM-7)
+│       ├── tech-stack.md          Technology choices, alternatives
+│       ├── tech-spec.md           Internal architecture, data model,
+│       │                          flows, anchor resolution, ZIP rules
+│       └── test-plan.md           Test pyramid, fixtures, coverage matrix
 ├── src/epub_deepl/        Source package
 │   ├── cli.py                     argparse entry; dispatches to prepare/restore
 │   ├── errors.py                  Typed exception hierarchy

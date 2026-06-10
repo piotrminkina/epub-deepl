@@ -174,9 +174,12 @@ CI matrix tests Python 3.11 / 3.12 / 3.13 on every push and PR; a
 dedicated CI job re-runs the synthetic `epubcheck` zero-drift tests
 with a JRE installed.
 
-Open items tracked in
-[`docs/plans/devils-advocate-review.md`](docs/plans/devils-advocate-review.md)
-and per-release notes in [`CHANGELOG.md`](CHANGELOG.md):
+Per-release notes in [`CHANGELOG.md`](CHANGELOG.md);
+empirical operational gotchas in
+[`docs/lessons-learned.md`](docs/lessons-learned.md);
+architecture decisions in [`docs/adr/`](docs/adr/).
+
+Known limitations:
 
 - EPUB 3 + `nav.xhtml` support — deferred to post-MVP
 - Apple Books / Calibre-specific metadata quirks — observed but not

@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   test-corpus monoculture gap from `lessons-learned.md` P-2.
 - **3 ADRs** in `docs/adr/`: original-EPUB-as-state, BCP 47
   pass-through, centralized parser factory.
-- **`docs/plans/lessons-learned.md`** capturing real-world gotchas
+- **`docs/lessons-learned.md`** capturing real-world gotchas
   (G-1..G-4), empirical DeepL behaviour catalog, and process
   retrospective (P-1..P-5).
 - **`bin/epub-deepl`** launcher that self-locates the project

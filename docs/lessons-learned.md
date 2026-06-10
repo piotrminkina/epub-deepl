@@ -6,7 +6,7 @@ This file collects operational gotchas, empirical observations about
 external systems, and process retrospectives from the project's
 implementation phase.
 
-Unlike the architecture decisions in [`docs/adr/`](../adr/), these
+Unlike the architecture decisions in [`docs/adr/`](adr/), these
 entries have a **time-decay**: they were true at the date above, but
 external systems (DeepL, lxml, Python distros) may shift. Re-validate
 before treating them as authoritative for new work.
@@ -37,7 +37,7 @@ ASCII-only. The bug only manifests on non-ASCII characters in body
 fragments. Regression test added:
 `test_replace_body_preserves_non_ascii_utf8`.
 
-Pinned in: [ADR-0003](../adr/0003-centralized-parser-factory.md),
+Pinned in: [ADR-0003](adr/0003-centralized-parser-factory.md),
 `epub/_safe_parser.py::html_parser` docstring.
 
 ### G-2. Python venv is per-minor-version
@@ -57,7 +57,7 @@ Python does not enforce it against the running interpreter.
 (Python 3.11 on Debian 12) cannot be reused from a Fedora 41+ host
 (Python 3.13+) — even though both can execute the same source.
 
-**Mitigation in this repo (final):** [ADR-0004](../adr/0004-per-python-minor-venv.md)
+**Mitigation in this repo (final):** [ADR-0004](adr/0004-per-python-minor-venv.md)
 adopted **per-Python-minor venv naming**: each venv lives at
 `.venv-${PY_MINOR}/` (e.g. `.venv-3.11/`, `.venv-3.14/`). The
 `bin/epub-deepl` launcher resolves the venv by matching the system
@@ -177,23 +177,49 @@ upload), 2026-06-10.
 
 ### P-1. Devils-advocate caught architectural issues; real use found new classes
 
-The pre-implementation devils-advocate review surfaced C-1..C-4 and
-17 important findings. All were folded into the planning documents
-before code landed.
+A pre-implementation **devils-advocate review** was run against the
+planning documents (PRD, tech-stack, tech-spec, test-plan) before any
+code landed. It surfaced 4 critical findings (C-1..C-4) and 17
+important findings (I-1..I-17). All 21 were addressed — folded into
+the planning documents directly, then enforced by the implementation
+that followed. The MVP shipped without any of the predicted weaknesses
+lurking.
 
 But **two new bug classes emerged in real-world usage** that the
-review did not anticipate:
+review did not anticipate. Both were addressed in commits subsequent
+to the MVP and are now permanently regressed against.
 
-- **C-5: SVG/MathML attribute case** — surfaced when running
-  `epubcheck` on the first restore output. Not caught by 118
-  automated tests because their synthetic SVG was minimal.
-- **UTF-8 mojibake in body fragments** — surfaced only on the first
-  real Polish DeepL output. Not caught by 164 automated tests
-  because synthetic and corpus EPUBs were ASCII-only.
+| Bug | Surfaced via | Why the review missed it |
+|---|---|---|
+| **C-5: SVG/MathML attribute case lowercased by HTML4 parsers.** `lxml.html` (libxml2 HTML4 mode) and DeepL both normalise attribute names to lowercase. SVG spec requires `viewBox`/`preserveAspectRatio` etc. in camelCase; epubcheck rejects lowercased variants. | Manual `epubcheck` on first restore output (corpus book with embedded SVG titlepage). | Synthetic SVG in tests was minimal; test suite never invoked `epubcheck` automatically. |
+| **UTF-8 mojibake in body fragments.** `lxml.html.HTMLParser` defaults to ISO-8859-1 for input without a charset declaration. Polish UTF-8 bytes round-tripped as double-encoded mojibake in chapter bodies AND (via anchor resolution) in NCX navLabels. | First real Polish DeepL translation. | The entire corpus + synthetic fixtures was ASCII-only. The bug had been latent since initial implementation. |
 
-**Lesson:** devils-advocate works for *known* unknowns. Real usage
-discovers *unknown* unknowns. Both stages are necessary; neither is
-sufficient.
+Both bug classes share a property: **they manifest only on real
+external-system output combined with real content.** No self-contained
+reasoning about the code could have predicted them without explicit
+non-ASCII fixtures or an automated `epubcheck` gate.
+
+Lessons folded into the next review cycle:
+
+1. **Synthetic fixtures must include non-ASCII content** as a matter
+   of policy. Now enforced by `test_replace_body_preserves_non_ascii_utf8`
+   (unit) and `test_roundtrip_preserves_non_ascii_content_end_to_end`
+   (integration). See P-2.
+2. **`epubcheck` must be exercised in CI**, not just as a manual
+   release gate. Now enforced by the `@pytest.mark.epubcheck` marker
+   tests and a dedicated GitHub Actions job that installs JRE +
+   hash-pinned epubcheck.
+3. **Devils-advocate is necessary but not sufficient.** The
+   unknown-unknowns section in the original review tried to surface
+   this category, but by definition it cannot enumerate the
+   unknown-unknowns themselves. Real-world spike runs (S-1, S-2 in
+   tech-stack §10) are the complementary discipline.
+
+The original `devils-advocate-review.md` document was removed from
+the repo when its findings stopped being a useful reading order for
+outside contributors — every critical finding had been addressed and
+documented elsewhere (PRD acceptance criteria, ADRs, this file). The
+content remains available via git history at commit `57980ea`.
 
 ### P-2. Test corpus monoculture is a real risk
 
