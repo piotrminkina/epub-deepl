@@ -102,5 +102,5 @@ Round-trip pipeline EPUB ↔ HTML for DeepL document translation.
 - **Planning artifacts** in `docs/plans/`: PRD, tech-stack, tech-spec,
   test-plan, devils-advocate review.
 
-[Unreleased]: https://github.com/OWNER/REPO/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/OWNER/REPO/releases/tag/v0.1.0
+[Unreleased]: https://github.com/piotrminkina/epub-deepl/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/piotrminkina/epub-deepl/releases/tag/v0.1.0

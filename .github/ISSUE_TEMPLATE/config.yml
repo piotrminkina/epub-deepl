@@ -1,7 +1,7 @@
 blank_issues_enabled: false
-# After publishing this repo to GitHub, replace OWNER/REPO with the
+# After publishing this repo to GitHub, replace piotrminkina/epub-deepl with the
 # canonical path so the link resolves in the issue chooser.
 contact_links:
   - name: Project documentation
-    url: https://github.com/OWNER/REPO/tree/master/docs
+    url: https://github.com/piotrminkina/epub-deepl/tree/master/docs
     about: Architecture decisions (ADRs), PRD, tech-spec, lessons learned.

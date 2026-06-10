@@ -1,12 +1,12 @@
 # EPUB DeepL
 
 <!--
-  Badge URLs include OWNER/REPO placeholders. Replace with the actual
+  Badge URLs include piotrminkina/epub-deepl placeholders. Replace with the actual
   GitHub path (e.g. `piotrminkina/epub-deepl`) once the repo
   is published.
 -->
 
-[![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)
+[![CI](https://github.com/piotrminkina/epub-deepl/actions/workflows/ci.yml/badge.svg)](https://github.com/piotrminkina/epub-deepl/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-d7ff64)](https://docs.astral.sh/ruff/)
