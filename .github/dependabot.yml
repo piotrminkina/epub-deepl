@@ -22,3 +22,19 @@ updates:
     commit-message:
       prefix: "ci"
       include: scope
+    # Group action bumps so each monthly cycle produces at most two PRs
+    # (one for safe minor+patch, one for major bumps requiring manual
+    # review). Without grouping, Dependabot opens one PR per action —
+    # the initial scan of this repo emitted three simultaneous PRs
+    # (#1 #2 #3, all touching `.github/workflows/ci.yml`), creating
+    # noise and pseudo-conflicts at merge time.
+    groups:
+      actions-minor-patch:
+        patterns: ["*"]
+        update-types:
+          - minor
+          - patch
+      actions-major:
+        patterns: ["*"]
+        update-types:
+          - major
