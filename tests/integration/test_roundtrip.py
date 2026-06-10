@@ -570,3 +570,105 @@ def test_cli_turnaround_per_book(
 
     assert rc2 == 0, f"restore failed: {stderr.getvalue()}"
     assert elapsed < 60, f"Too slow: {elapsed:.1f}s"
+
+
+# ---------------------------------------------------------------------------
+# Non-ASCII content end-to-end (lessons-learned G-1, P-2)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+def test_roundtrip_preserves_non_ascii_content_end_to_end(
+    tmp_path: pathlib.Path,
+) -> None:
+    """End-to-end policy guard: an EPUB whose metadata AND body contain
+    Polish, CJK, and Cyrillic characters round-trips through
+    prepare → restore without translation and emerges byte-identical
+    in every non-ASCII run.
+
+    Closes the policy gap from lessons-learned P-2 (test corpus
+    monoculture). The pre-existing unit test
+    `test_replace_body_preserves_non_ascii_utf8` pins the
+    `replace_body_content` function; this test pins the full CLI
+    pipeline (so future regressions in OPF, NCX, or the writer cannot
+    slip past).
+    """
+    import zipfile
+
+    from epub_deepl_prepare.cli import main as cli_main
+    from tests.fixtures.minimal import NavPointSpec
+
+    polish = "Poniższa książka zawiera żółć, ąęóźż — święto słowiańskich znaków."
+    cjk = "日本語のテキスト、中文测试テスト、한국어 시험 — Unicode CJK 区域."
+    cyrillic = "Кириллица проверка: щ ъ ы ь э ю я ё."
+
+    epub_bytes = build_minimal_epub(
+        titles=("Książka testowa — 测试", "Druga okładka"),
+        descriptions=(polish, cjk),
+        subjects=("вкуса-теста", "polski", "中文"),
+        creators=("Иван Иванов",),
+        language="pl",
+        xhtmls=[
+            XhtmlSpec(
+                href="ch01.xhtml",
+                title="Próbka — 章节一",
+                body_html=(
+                    '<h1 id="ch1">Wprowadzenie — 序章 — Введение</h1>'
+                    f"<p>{polish}</p>"
+                    f"<p>{cjk}</p>"
+                    f"<p>{cyrillic}</p>"
+                ),
+            )
+        ],
+        nav_map=[
+            NavPointSpec(
+                label="Wprowadzenie — 序章 — Введение",
+                src="ch01.xhtml#ch1",
+            ),
+        ],
+    )
+    in_path = tmp_path / "non-ascii.epub"
+    in_path.write_bytes(epub_bytes)
+    html_out = tmp_path / "prepared.html"
+    epub_out = tmp_path / "restored.epub"
+
+    assert cli_main(["prepare", str(in_path), "--output", str(html_out)]) == 0
+    assert (
+        cli_main(["restore", str(in_path), str(html_out), "--output", str(epub_out)])
+        == 0
+    )
+
+    # Every distinct non-ASCII run from the inputs must appear unchanged in
+    # the restored OPF, NCX, or chapter XHTML. We assert on raw UTF-8 bytes
+    # (not str equality) so a Latin-1 round-trip would fail loudly.
+    with zipfile.ZipFile(epub_out) as zf:
+        opf_bytes = next(
+            zf.read(n) for n in zf.namelist() if n.endswith(".opf")
+        )
+        ncx_bytes = next(
+            zf.read(n) for n in zf.namelist() if n.endswith(".ncx")
+        )
+        xhtml_bytes = b"".join(
+            zf.read(n) for n in zf.namelist() if n.endswith((".xhtml", ".html"))
+        )
+
+    blob = opf_bytes + ncx_bytes + xhtml_bytes
+    for fragment, label in [
+        (polish, "Polish body"),
+        (cjk, "CJK body"),
+        (cyrillic, "Cyrillic body"),
+        ("Książka testowa — 测试", "mixed title"),
+        ("Иван Иванов", "Cyrillic creator (untranslated)"),
+        ("вкуса-теста", "Cyrillic subject"),
+        ("Wprowadzenie — 序章 — Введение", "tri-script heading"),
+    ]:
+        assert fragment.encode("utf-8") in blob, (
+            f"{label}: {fragment!r} (UTF-8) not found in restored EPUB output"
+        )
+
+        # Mojibake form (UTF-8 bytes re-decoded as Latin-1, re-encoded UTF-8)
+        # must NOT appear anywhere.
+        mojibake = fragment.encode("utf-8").decode("latin-1").encode("utf-8")
+        assert mojibake not in blob, (
+            f"{label}: mojibake leaked through for {fragment!r}"
+        )
