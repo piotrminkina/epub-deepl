@@ -1,11 +1,5 @@
 # EPUB DeepL
 
-<!--
-  Badge URLs include piotrminkina/epub-deepl placeholders. Replace with the actual
-  GitHub path (e.g. `piotrminkina/epub-deepl`) once the repo
-  is published.
--->
-
 [![CI](https://github.com/piotrminkina/epub-deepl/actions/workflows/ci.yml/badge.svg)](https://github.com/piotrminkina/epub-deepl/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -22,8 +16,8 @@ book to one DeepL document while preserving the table of contents, OPF
 metadata, NCX navigation, manifest, spine, and all non-translated structural
 identifiers.
 
-**Status:** MVP draft v1. Targets EPUB 2.0 + NCX (the format of the typical
-corpus). EPUB 3 + `nav.xhtml` is out of MVP scope.
+**Status:** working MVP, no versioned release cut yet. Targets EPUB 2.0
+with NCX-based navigation. EPUB 3 + `nav.xhtml` is out of scope for now.
 
 ## Install
 
@@ -34,15 +28,18 @@ the system libraries for `lxml` (typically present, or installable via
 ```bash
 git clone <your-fork> epub-deepl
 cd epub-deepl
-python3.11 -m venv .venv
-source .venv/bin/activate
+
+# Per ADR-0004 the venv is named after the host's Python minor so it
+# coexists with venvs from other interpreters (e.g. a Dev Container's).
+PY_MINOR="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+python3 -m venv ".venv-${PY_MINOR}"
+source ".venv-${PY_MINOR}/bin/activate"
 pip install -e .
 epub-deepl --help
 ```
 
-If you prefer to invoke the tool without activating the virtualenv each
-session, use the `bin/` launcher (see below) or symlink it into a directory
-on your `PATH`.
+To skip activating the virtualenv each session, use the `bin/` launcher
+(see below) or symlink it into a directory on your `PATH`.
 
 > **Contributing or developing the tool?** See
 > [CONTRIBUTING.md](CONTRIBUTING.md) for the recommended Dev Container
@@ -79,10 +76,13 @@ are mutated.
 
 ### `bin/` launcher (no venv activation)
 
-`bin/epub-deepl` is a thin Bash wrapper that self-locates the
-project's `.venv` interpreter directly. Use it when invoking the tool from
-outside an activated virtualenv — shell aliases, cron jobs, editor
-integrations:
+`bin/epub-deepl` is a thin Bash wrapper that self-locates the project
+root and execs the matching venv's Python with the CLI module. It
+picks `.venv-${PY_MINOR}/` for the current `python3`, falling back to
+legacy `.venv/` only if its `pyvenv.cfg` declares the matching minor
+(see [ADR-0004](docs/adr/0004-per-python-minor-venv.md)). Use it for
+shell aliases, cron jobs, or editor integrations where activating a
+virtualenv first is awkward:
 
 ```bash
 # Run from any directory
@@ -93,7 +93,8 @@ ln -s "$(pwd)/bin/epub-deepl" ~/.local/bin/
 epub-deepl prepare book.epub
 ```
 
-The wrapper fails fast with a diagnostic if the virtualenv is missing.
+The wrapper fails fast with a concrete creation recipe when no
+compatible venv exists.
 
 ## Commands
 
