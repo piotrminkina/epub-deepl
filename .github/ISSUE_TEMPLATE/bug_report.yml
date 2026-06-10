@@ -1,0 +1,95 @@
+name: Bug report
+description: A round-trip produced a broken EPUB, or the CLI crashed on a valid input.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a report. **Do not attach EPUB files
+        unless you can confirm they carry no DRM and the publisher's terms
+        permit redistribution.** Excerpts of OPF / NCX / specific XHTML files
+        are usually enough to diagnose.
+
+  - type: input
+    id: version
+    attributes:
+      label: Tool version
+      description: Output of `epub-deepl-prepare --version`
+      placeholder: epub-deepl-prepare 0.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      description: Output of `python --version`
+      placeholder: Python 3.12.4
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: Fedora 41 / Ubuntu 24.04 / macOS 15 / etc.
+    validations:
+      required: true
+
+  - type: textarea
+    id: command
+    attributes:
+      label: Command invoked
+      description: Exact CLI invocation (`prepare …` or `restore …`)
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: stderr
+    attributes:
+      label: Full stderr output
+      description: Run with `--verbose`. Paste the entire stderr stream.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: input_metadata
+    attributes:
+      label: Input EPUB metadata
+      description: |
+        EPUB version + size + source. Do NOT attach the file itself.
+        If the bug is structural (TOC drift, missing metadata), paste
+        the relevant fragments of the input OPF or NCX here.
+      placeholder: |
+        EPUB 2.0.1, ~14 MB, Manning Publications
+        Calibre-generated OPF; NCX has 114 navPoints with depth 4
+    validations:
+      required: true
+
+  - type: textarea
+    id: epubcheck_in
+    attributes:
+      label: epubcheck on input EPUB
+      description: Output of `epubcheck <input>.epub`. Required when the bug is structural.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: epubcheck_out
+    attributes:
+      label: epubcheck on output EPUB
+      description: Output of `epubcheck <output>.epub`. Required when the bug is structural.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs actual
+      description: What you expected to happen, and what actually happened.
+    validations:
+      required: true

@@ -1,5 +1,16 @@
 # EPUB DeepL Prepare
 
+<!--
+  Badge URLs include OWNER/REPO placeholders. Replace with the actual
+  GitHub path (e.g. `piotrminkina/epub-deepl-prepare`) once the repo
+  is published.
+-->
+
+[![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-d7ff64)](https://docs.astral.sh/ruff/)
+
 A Python CLI that bundles all human-facing content of an EPUB into **a single
 HTML document** suitable for DeepL's document-translation feature, then
 reassembles the translated HTML back into a **structurally identical EPUB**.
@@ -153,17 +164,25 @@ Full requirements with user stories: [`docs/plans/prd.md`](docs/plans/prd.md).
 ## Project Status
 
 **MVP draft v1.** Tested against a 4-EPUB corpus (technical, novel,
-workbook genres; all EPUB 2.0 + NCX). All 118 unit and integration tests
-pass; full corpus round-trip preserves epubcheck baseline (0 errors in →
-0 errors out).
+workbook genres; all EPUB 2.0 + NCX). 175 unit + integration tests pass;
+full corpus round-trip preserves the `epubcheck` baseline (0 errors in →
+0 errors out). Real-DeepL spike completed: one full Polish translation
+of a 22-chapter / 114-navPoint book round-tripped cleanly, R-8 (DeepL
+preserves `data-*` attributes) empirically validated.
+
+CI matrix tests Python 3.11 / 3.12 / 3.13 on every push and PR; a
+dedicated CI job re-runs the synthetic `epubcheck` zero-drift tests
+with a JRE installed.
 
 Open items tracked in
-[`docs/plans/devils-advocate-review.md`](docs/plans/devils-advocate-review.md):
-- R-8 spike (real DeepL preserves `data-*` attributes) — manual
-  verification recommended before first production use
+[`docs/plans/devils-advocate-review.md`](docs/plans/devils-advocate-review.md)
+and per-release notes in [`CHANGELOG.md`](CHANGELOG.md):
+
 - EPUB 3 + `nav.xhtml` support — deferred to post-MVP
 - Apple Books / Calibre-specific metadata quirks — observed but not
   specially handled
+- Books exceeding DeepL's per-document character limit (~1 MB+) — no
+  automatic chunking; user falls back to per-chapter workflow
 
 ## License
 
