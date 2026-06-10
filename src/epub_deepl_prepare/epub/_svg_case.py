@@ -95,8 +95,7 @@ def restore_svg_attribute_case(tree: etree._Element) -> None:
             continue
         local = el.tag.rsplit("}", 1)[-1].lower()
         is_svg_subtree = local in _SVG_LOCAL_NAMES or any(
-            isinstance(a.tag, str)
-            and a.tag.rsplit("}", 1)[-1].lower() in _SVG_LOCAL_NAMES
+            isinstance(a.tag, str) and a.tag.rsplit("}", 1)[-1].lower() in _SVG_LOCAL_NAMES
             for a in el.iterancestors()
         )
         if not is_svg_subtree:

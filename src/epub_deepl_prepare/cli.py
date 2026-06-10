@@ -235,8 +235,8 @@ def _resolve_target_lang(
     # Drift detection (does NOT fail — informational only).
     if source and primary_subtag(source) == primary_subtag(chosen):
         _log.warning(
-            'translated HTML declares language %r whose primary subtag matches '
-            'the source EPUB (%r); verify that translation actually happened',
+            "translated HTML declares language %r whose primary subtag matches "
+            "the source EPUB (%r); verify that translation actually happened",
             chosen,
             source,
         )

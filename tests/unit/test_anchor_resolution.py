@@ -44,8 +44,15 @@ def _make_epub_with_xhtmls(
         manifest=manifest,
         spine=Spine(items=spine_items, toc_idref="ncx"),
         metadata=OpfMetadata(
-            titles=["T"], descriptions=[], subjects=[], language="en",
-            creators=[], publishers=[], dates=[], identifiers=[], rights=[],
+            titles=["T"],
+            descriptions=[],
+            subjects=[],
+            language="en",
+            creators=[],
+            publishers=[],
+            dates=[],
+            identifiers=[],
+            rights=[],
             extra_raw_xml=b"<metadata/>",
         ),
         ncx=Ncx(doc_title="T", nav_map=[], raw_xml=b"<ncx/>", ncx_href_in_zip=f"{opf_dir}/toc.ncx"),
@@ -61,9 +68,11 @@ def test_resolve_label_with_fragment() -> None:
     """Anchor resolution finds element by id when src has fragment."""
     from epub_deepl_prepare.epub.ncx import resolve_label
 
-    epub = _make_epub_with_xhtmls({
-        "ch01.xhtml": '<h1 id="ch1-heading">Chapter One Title</h1><p>Content</p>',
-    })
+    epub = _make_epub_with_xhtmls(
+        {
+            "ch01.xhtml": '<h1 id="ch1-heading">Chapter One Title</h1><p>Content</p>',
+        }
+    )
     nav_point = NavPoint(
         nav_id="np1", play_order=1, label="Old Label", src="ch01.xhtml#ch1-heading"
     )
@@ -82,15 +91,14 @@ def test_resolve_label_with_fragment_resolves_to_correct_id() -> None:
     """Anchor resolution picks the element with the matching id, not any heading."""
     from epub_deepl_prepare.epub.ncx import resolve_label
 
-    epub = _make_epub_with_xhtmls({
-        "ch01.xhtml": (
-            '<h1 id="wrong">Wrong Heading</h1>'
-            '<h2 id="correct">Correct Section</h2>'
-        ),
-    })
-    nav_point = NavPoint(
-        nav_id="np1", play_order=1, label="Old", src="ch01.xhtml#correct"
+    epub = _make_epub_with_xhtmls(
+        {
+            "ch01.xhtml": (
+                '<h1 id="wrong">Wrong Heading</h1><h2 id="correct">Correct Section</h2>'
+            ),
+        }
     )
+    nav_point = NavPoint(nav_id="np1", play_order=1, label="Old", src="ch01.xhtml#correct")
     label = resolve_label(
         nav_point=nav_point,
         ncx_href_in_zip="OEBPS/toc.ncx",
@@ -106,9 +114,11 @@ def test_resolve_label_with_fragment_returns_normalized_whitespace() -> None:
     """Label is whitespace-normalised (SM-3)."""
     from epub_deepl_prepare.epub.ncx import resolve_label
 
-    epub = _make_epub_with_xhtmls({
-        "ch01.xhtml": '<h1 id="h1">  Chapter   One  </h1>',
-    })
+    epub = _make_epub_with_xhtmls(
+        {
+            "ch01.xhtml": '<h1 id="h1">  Chapter   One  </h1>',
+        }
+    )
     nav_point = NavPoint(nav_id="np1", play_order=1, label="Old", src="ch01.xhtml#h1")
     label = resolve_label(
         nav_point=nav_point,
@@ -125,9 +135,11 @@ def test_resolve_label_without_fragment_uses_first_heading() -> None:
     """When src has no fragment, first heading is used."""
     from epub_deepl_prepare.epub.ncx import resolve_label
 
-    epub = _make_epub_with_xhtmls({
-        "ch01.xhtml": '<h1>First Heading</h1><p>Para</p>',
-    })
+    epub = _make_epub_with_xhtmls(
+        {
+            "ch01.xhtml": "<h1>First Heading</h1><p>Para</p>",
+        }
+    )
     nav_point = NavPoint(nav_id="np1", play_order=1, label="Old", src="ch01.xhtml")
     label = resolve_label(
         nav_point=nav_point,
@@ -144,9 +156,11 @@ def test_resolve_label_h2_used_when_no_h1() -> None:
     """Falls through to h2 if no h1 exists."""
     from epub_deepl_prepare.epub.ncx import resolve_label
 
-    epub = _make_epub_with_xhtmls({
-        "ch01.xhtml": '<h2 id="sec">Section Title</h2><p>Para</p>',
-    })
+    epub = _make_epub_with_xhtmls(
+        {
+            "ch01.xhtml": '<h2 id="sec">Section Title</h2><p>Para</p>',
+        }
+    )
     nav_point = NavPoint(nav_id="np1", play_order=1, label="Old", src="ch01.xhtml")
     label = resolve_label(
         nav_point=nav_point,
@@ -163,9 +177,11 @@ def test_resolve_label_h3_used_when_no_h1_h2() -> None:
     """Falls through to h3 if no h1 or h2 exists."""
     from epub_deepl_prepare.epub.ncx import resolve_label
 
-    epub = _make_epub_with_xhtmls({
-        "ch01.xhtml": '<h3>Subsection</h3><p>Para</p>',
-    })
+    epub = _make_epub_with_xhtmls(
+        {
+            "ch01.xhtml": "<h3>Subsection</h3><p>Para</p>",
+        }
+    )
     nav_point = NavPoint(nav_id="np1", play_order=1, label="Old", src="ch01.xhtml")
     label = resolve_label(
         nav_point=nav_point,
@@ -182,9 +198,11 @@ def test_resolve_label_no_heading_falls_back_to_flat_label() -> None:
     """When no heading exists, flat_labels fallback is used."""
     from epub_deepl_prepare.epub.ncx import resolve_label
 
-    epub = _make_epub_with_xhtmls({
-        "ch01.xhtml": '<p>Just a paragraph, no heading.</p>',
-    })
+    epub = _make_epub_with_xhtmls(
+        {
+            "ch01.xhtml": "<p>Just a paragraph, no heading.</p>",
+        }
+    )
     nav_point = NavPoint(nav_id="np1", play_order=1, label="OrigLabel", src="ch01.xhtml")
     label = resolve_label(
         nav_point=nav_point,
@@ -201,12 +219,12 @@ def test_resolve_label_missing_fragment_no_heading_falls_back_to_flat_label() ->
     """Fragment not found + no heading → flat_label fallback."""
     from epub_deepl_prepare.epub.ncx import resolve_label
 
-    epub = _make_epub_with_xhtmls({
-        "ch01.xhtml": '<p>Content without the expected anchor.</p>',
-    })
-    nav_point = NavPoint(
-        nav_id="np1", play_order=1, label="Orig", src="ch01.xhtml#missing-id"
+    epub = _make_epub_with_xhtmls(
+        {
+            "ch01.xhtml": "<p>Content without the expected anchor.</p>",
+        }
     )
+    nav_point = NavPoint(nav_id="np1", play_order=1, label="Orig", src="ch01.xhtml#missing-id")
     label = resolve_label(
         nav_point=nav_point,
         ncx_href_in_zip="OEBPS/toc.ncx",
@@ -222,10 +240,12 @@ def test_resolve_label_id_collision_across_files_scoped_per_file() -> None:
     """Same id in two files resolves to the correct file's element (R-4 / C-3)."""
     from epub_deepl_prepare.epub.ncx import resolve_label
 
-    epub = _make_epub_with_xhtmls({
-        "ch01.xhtml": '<h1 id="intro">Chapter 1 Intro</h1>',
-        "ch02.xhtml": '<h1 id="intro">Chapter 2 Intro</h1>',
-    })
+    epub = _make_epub_with_xhtmls(
+        {
+            "ch01.xhtml": '<h1 id="intro">Chapter 1 Intro</h1>',
+            "ch02.xhtml": '<h1 id="intro">Chapter 2 Intro</h1>',
+        }
+    )
 
     nav1 = NavPoint(nav_id="np1", play_order=1, label="Old1", src="ch01.xhtml#intro")
     nav2 = NavPoint(nav_id="np2", play_order=2, label="Old2", src="ch02.xhtml#intro")
@@ -257,9 +277,7 @@ def test_resolve_label_ncx_in_subdirectory() -> None:
     # Structure: OPF at OEBPS/content.opf, NCX at OEBPS/toc.ncx, XHTML at OEBPS/Text/ch01.xhtml
     epub = _make_epub_with_xhtmls({"Text/ch01.xhtml": '<h1 id="h1">Correct Title</h1>'})
 
-    nav_point = NavPoint(
-        nav_id="np1", play_order=1, label="Old", src="Text/ch01.xhtml#h1"
-    )
+    nav_point = NavPoint(nav_id="np1", play_order=1, label="Old", src="Text/ch01.xhtml#h1")
     label = resolve_label(
         nav_point=nav_point,
         ncx_href_in_zip="OEBPS/toc.ncx",
@@ -285,7 +303,7 @@ def test_xpath_literal_string_with_single_quote() -> None:
 @pytest.mark.unit
 def test_xpath_literal_string_with_both_quotes() -> None:
     """Strings with both quote types use concat()."""
-    result = xpath_literal("it's a \"test\"")
+    result = xpath_literal('it\'s a "test"')
     assert result.startswith("concat(")
     # Verify it's valid XPath by checking structure
     assert "'" in result and '"' in result

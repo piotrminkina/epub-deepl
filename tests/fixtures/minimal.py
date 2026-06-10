@@ -144,65 +144,68 @@ def build_minimal_epub(
                 href="ch03.xhtml",
                 title="Chapter 3",
                 body_html=(
-                    '<h1 id="ch3-heading">Chapter Three Heading</h1>'
-                    "<p>Chapter 3 content.</p>"
+                    '<h1 id="ch3-heading">Chapter Three Heading</h1><p>Chapter 3 content.</p>'
                 ),
             ),
         ]
 
     if nav_map is None:
-        nav_map = [
-            NavPointSpec(
-                label="Chapter One",
-                src=f"{xhtmls[0].href}#ch1-heading",
-                nav_id="navPoint-1",
-                play_order=1,
-            ),
-            NavPointSpec(
-                label="Chapter Two",
-                src=f"{xhtmls[1].href}#ch2-heading",
-                nav_id="navPoint-2",
-                play_order=2,
-            ),
-            NavPointSpec(
-                label="Chapter Three",
-                src=f"{xhtmls[2].href}#ch3-heading",
-                nav_id="navPoint-3",
-                play_order=3,
-            ),
-        ] if len(xhtmls) >= 3 else [
-            NavPointSpec(
-                label=x.title,
-                src=x.href,
-                nav_id=f"navPoint-{i+1}",
-                play_order=i + 1,
-            )
-            for i, x in enumerate(xhtmls)
-        ]
+        nav_map = (
+            [
+                NavPointSpec(
+                    label="Chapter One",
+                    src=f"{xhtmls[0].href}#ch1-heading",
+                    nav_id="navPoint-1",
+                    play_order=1,
+                ),
+                NavPointSpec(
+                    label="Chapter Two",
+                    src=f"{xhtmls[1].href}#ch2-heading",
+                    nav_id="navPoint-2",
+                    play_order=2,
+                ),
+                NavPointSpec(
+                    label="Chapter Three",
+                    src=f"{xhtmls[2].href}#ch3-heading",
+                    nav_id="navPoint-3",
+                    play_order=3,
+                ),
+            ]
+            if len(xhtmls) >= 3
+            else [
+                NavPointSpec(
+                    label=x.title,
+                    src=x.href,
+                    nav_id=f"navPoint-{i + 1}",
+                    play_order=i + 1,
+                )
+                for i, x in enumerate(xhtmls)
+            ]
+        )
 
     # Build OPF metadata XML
     meta_lines: list[str] = []
     lang_list = languages if languages is not None else [language]
     for lang_val in lang_list:
-        meta_lines.append(f'    <dc:language>{lang_val}</dc:language>')
+        meta_lines.append(f"    <dc:language>{lang_val}</dc:language>")
     for t in titles:
-        meta_lines.append(f'    <dc:title>{_escape(t)}</dc:title>')
+        meta_lines.append(f"    <dc:title>{_escape(t)}</dc:title>")
     for d in descriptions:
-        meta_lines.append(f'    <dc:description>{_escape(d)}</dc:description>')
+        meta_lines.append(f"    <dc:description>{_escape(d)}</dc:description>")
     for s in subjects:
-        meta_lines.append(f'    <dc:subject>{_escape(s)}</dc:subject>')
+        meta_lines.append(f"    <dc:subject>{_escape(s)}</dc:subject>")
     for c in creators:
         meta_lines.append(f'    <dc:creator opf:role="aut">{_escape(c)}</dc:creator>')
     for p in publishers:
-        meta_lines.append(f'    <dc:publisher>{_escape(p)}</dc:publisher>')
+        meta_lines.append(f"    <dc:publisher>{_escape(p)}</dc:publisher>")
     for dt in dates:
-        meta_lines.append(f'    <dc:date>{_escape(dt)}</dc:date>')
+        meta_lines.append(f"    <dc:date>{_escape(dt)}</dc:date>")
     for ident in identifiers:
         meta_lines.append(f'    <dc:identifier id="BookID">{_escape(ident)}</dc:identifier>')
     for r in rights:
-        meta_lines.append(f'    <dc:rights>{_escape(r)}</dc:rights>')
+        meta_lines.append(f"    <dc:rights>{_escape(r)}</dc:rights>")
     if extra_opf_meta:
-        meta_lines.append(f'    {extra_opf_meta}')
+        meta_lines.append(f"    {extra_opf_meta}")
 
     # Build manifest
     manifest_lines: list[str] = []
@@ -210,19 +213,17 @@ def build_minimal_epub(
         '    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>'
     )
     if include_css:
-        manifest_lines.append(
-            '    <item id="css" href="stylesheet.css" media-type="text/css"/>'
-        )
+        manifest_lines.append('    <item id="css" href="stylesheet.css" media-type="text/css"/>')
     for i, xhtml in enumerate(xhtmls):
         manifest_lines.append(
-            f'    <item id="chapter{i+1}" href="{xhtml.href}" '
+            f'    <item id="chapter{i + 1}" href="{xhtml.href}" '
             f'media-type="application/xhtml+xml"/>'
         )
 
     # Build spine
     spine_lines: list[str] = []
     for i in range(len(xhtmls)):
-        spine_lines.append(f'    <itemref idref="chapter{i+1}"/>')
+        spine_lines.append(f'    <itemref idref="chapter{i + 1}"/>')
 
     opf_content = _OPF_TEMPLATE.format(
         metadata_elements="\n".join(meta_lines) + "\n",
@@ -303,9 +304,4 @@ def _render_nav_points(points: list[NavPointSpec], counter: list[int]) -> str:
 
 def _escape(s: str) -> str:
     """XML escape a string."""
-    return (
-        s.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-    )
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")

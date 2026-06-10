@@ -20,6 +20,7 @@ from tests.fixtures.minimal import NavPointSpec, XhtmlSpec, build_minimal_epub
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _roundtrip(epub_bytes: bytes, target_lang: str = "en") -> bytes:
     """Run prepare + restore on in-memory bytes. Returns output EPUB bytes."""
     from epub_deepl_prepare.epub.reader import read_epub_bytes
@@ -131,6 +132,7 @@ def _adversarial_translation(html: str, seed: int = 42) -> str:
 # Synthetic round-trip tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.integration
 def test_roundtrip_without_translation_synth_minimal() -> None:
     """Round-trip produces zip-invariant output on minimal EPUB."""
@@ -202,10 +204,7 @@ def test_mathml_receives_translate_no_in_prepare() -> None:
     from epub_deepl_prepare.epub.reader import read_epub_bytes
     from epub_deepl_prepare.merge.builder import build
 
-    math_body = (
-        '<math xmlns="http://www.w3.org/1998/Math/MathML">'
-        "<mrow><mn>1</mn></mrow></math>"
-    )
+    math_body = '<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><mn>1</mn></mrow></math>'
     epub_bytes = build_minimal_epub(
         xhtmls=[XhtmlSpec("ch01.xhtml", "Math", math_body)],
         nav_map=[],
@@ -218,7 +217,7 @@ def test_mathml_receives_translate_no_in_prepare() -> None:
 @pytest.mark.integration
 def test_roundtrip_without_translation_synth_with_ruby() -> None:
     """Ruby annotations survive round-trip."""
-    ruby_body = '<p><ruby>漢<rt>kan</rt></ruby>字</p>'
+    ruby_body = "<p><ruby>漢<rt>kan</rt></ruby>字</p>"
     epub_bytes = build_minimal_epub(
         xhtmls=[XhtmlSpec("ch01.xhtml", "Ruby", ruby_body)],
         nav_map=[],
@@ -284,8 +283,10 @@ def test_manifest_element_canonical_xml_identical_after_roundtrip() -> None:
                 [(c.get("id"), c.get("href"), c.get("media-type")) for c in el],
                 key=lambda t: t[0] or "",
             )
-        assert _manifest_items(orig_manifest) == _manifest_items(new_manifest), \
+
+        assert _manifest_items(orig_manifest) == _manifest_items(new_manifest), (
             "Manifest items changed after round-trip"
+        )
 
 
 @pytest.mark.integration
@@ -346,9 +347,7 @@ def test_input_equals_output_path_force_does_not_bypass(
 
     stderr = io.StringIO()
     with contextlib.redirect_stderr(stderr):
-        rc = main([
-            "prepare", str(synth_epub_file), "--output", str(synth_epub_file), "--force"
-        ])
+        rc = main(["prepare", str(synth_epub_file), "--output", str(synth_epub_file), "--force"])
     assert rc == 1
 
 
@@ -381,9 +380,7 @@ def test_adversarial_translation_strips_data_attribute_surfaces_precise_error() 
     html = build(epub)
 
     # Simulate DeepL stripping data-source-href from one section
-    stripped = html.replace(
-        'data-source-href="ch01.xhtml"', ""
-    )
+    stripped = html.replace('data-source-href="ch01.xhtml"', "")
     doc = parse_translated_html_bytes(stripped.encode("utf-8"))
 
     with pytest.raises(TranslatedHtmlMismatch):
@@ -404,16 +401,18 @@ def test_adversarial_translation_attribute_reorder_still_succeeds() -> None:
 
     # Reorder section attributes (swap data-spine-idx and data-source-href)
     import re
+
     def _swap_attrs(m: re.Match[str]) -> str:
         s = m.group(0)
         # Move data-spine-idx before data-source-href
         s = re.sub(
             r'(data-source-href="[^"]*")\s+(data-spine-idx="\d+")',
-            r'\2 \1',
+            r"\2 \1",
             s,
         )
         return s
-    reordered = re.sub(r'<section [^>]+>', _swap_attrs, html)
+
+    reordered = re.sub(r"<section [^>]+>", _swap_attrs, html)
 
     doc = parse_translated_html_bytes(reordered.encode("utf-8"))
     # Should succeed — attribute order doesn't matter for XPath queries
@@ -445,9 +444,7 @@ def test_adversarial_translation_random_seeded_combinations() -> None:
         except TranslatedHtmlMismatch:
             pass  # Precise failure — acceptable per SM-7
         except Exception as exc:
-            pytest.fail(
-                f"Adversarial seed={seed} caused opaque crash: {type(exc).__name__}: {exc}"
-            )
+            pytest.fail(f"Adversarial seed={seed} caused opaque crash: {type(exc).__name__}: {exc}")
 
 
 @pytest.mark.integration
@@ -476,6 +473,7 @@ def test_simulated_translation_completeness() -> None:
 # ---------------------------------------------------------------------------
 # Corpus round-trip tests (skipped if corpus absent)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.corpus
 def test_roundtrip_without_translation_is_content_identical(
@@ -544,9 +542,7 @@ def test_zip_packaging_invariants_hold_after_roundtrip(
 
 
 @pytest.mark.corpus
-def test_cli_turnaround_per_book(
-    corpus_epub: pathlib.Path, tmp_path: pathlib.Path
-) -> None:
+def test_cli_turnaround_per_book(corpus_epub: pathlib.Path, tmp_path: pathlib.Path) -> None:
     """SM-6: combined prepare+restore takes < 60s per book."""
     html_out = tmp_path / "prepared.html"
     epub_out = tmp_path / "restored.epub"
@@ -562,10 +558,9 @@ def test_cli_turnaround_per_book(
         rc1 = main(["prepare", str(corpus_epub), "--output", str(html_out)])
         if rc1 != 0:
             pytest.skip(f"prepare failed: {stderr.getvalue()}")
-        rc2 = main([
-            "restore", str(corpus_epub), str(html_out),
-            "--lang", "en", "--output", str(epub_out)
-        ])
+        rc2 = main(
+            ["restore", str(corpus_epub), str(html_out), "--lang", "en", "--output", str(epub_out)]
+        )
         elapsed = time.monotonic() - start
 
     assert rc2 == 0, f"restore failed: {stderr.getvalue()}"
@@ -633,24 +628,15 @@ def test_roundtrip_preserves_non_ascii_content_end_to_end(
     epub_out = tmp_path / "restored.epub"
 
     assert cli_main(["prepare", str(in_path), "--output", str(html_out)]) == 0
-    assert (
-        cli_main(["restore", str(in_path), str(html_out), "--output", str(epub_out)])
-        == 0
-    )
+    assert cli_main(["restore", str(in_path), str(html_out), "--output", str(epub_out)]) == 0
 
     # Every distinct non-ASCII run from the inputs must appear unchanged in
     # the restored OPF, NCX, or chapter XHTML. We assert on raw UTF-8 bytes
     # (not str equality) so a Latin-1 round-trip would fail loudly.
     with zipfile.ZipFile(epub_out) as zf:
-        opf_bytes = next(
-            zf.read(n) for n in zf.namelist() if n.endswith(".opf")
-        )
-        ncx_bytes = next(
-            zf.read(n) for n in zf.namelist() if n.endswith(".ncx")
-        )
-        xhtml_bytes = b"".join(
-            zf.read(n) for n in zf.namelist() if n.endswith((".xhtml", ".html"))
-        )
+        opf_bytes = next(zf.read(n) for n in zf.namelist() if n.endswith(".opf"))
+        ncx_bytes = next(zf.read(n) for n in zf.namelist() if n.endswith(".ncx"))
+        xhtml_bytes = b"".join(zf.read(n) for n in zf.namelist() if n.endswith((".xhtml", ".html")))
 
     blob = opf_bytes + ncx_bytes + xhtml_bytes
     for fragment, label in [
@@ -669,6 +655,4 @@ def test_roundtrip_preserves_non_ascii_content_end_to_end(
         # Mojibake form (UTF-8 bytes re-decoded as Latin-1, re-encoded UTF-8)
         # must NOT appear anywhere.
         mojibake = fragment.encode("utf-8").decode("latin-1").encode("utf-8")
-        assert mojibake not in blob, (
-            f"{label}: mojibake leaked through for {fragment!r}"
-        )
+        assert mojibake not in blob, f"{label}: mojibake leaked through for {fragment!r}"

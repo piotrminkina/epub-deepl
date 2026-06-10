@@ -25,9 +25,7 @@ from tests.fixtures.minimal import build_minimal_epub
 def _epub_bytes_without_file(epub_bytes: bytes, remove_name: str) -> bytes:
     """Return EPUB bytes with one file removed."""
     buf = io.BytesIO()
-    with zipfile.ZipFile(io.BytesIO(epub_bytes)) as src, zipfile.ZipFile(
-        buf, "w"
-    ) as dst:
+    with zipfile.ZipFile(io.BytesIO(epub_bytes)) as src, zipfile.ZipFile(buf, "w") as dst:
         for info in src.infolist():
             if info.filename == remove_name:
                 continue
@@ -46,9 +44,7 @@ def _epub_bytes_without_file(epub_bytes: bytes, remove_name: str) -> bytes:
 def _epub_bytes_wrong_mimetype(epub_bytes: bytes) -> bytes:
     """Return EPUB bytes with wrong mimetype content."""
     buf = io.BytesIO()
-    with zipfile.ZipFile(io.BytesIO(epub_bytes)) as src, zipfile.ZipFile(
-        buf, "w"
-    ) as dst:
+    with zipfile.ZipFile(io.BytesIO(epub_bytes)) as src, zipfile.ZipFile(buf, "w") as dst:
         for info in src.infolist():
             if info.filename == "mimetype":
                 zinfo = zipfile.ZipInfo("mimetype")
@@ -105,9 +101,7 @@ def test_validate_rejects_missing_container_xml() -> None:
     """ZIP without META-INF/container.xml must be rejected."""
     from epub_deepl_prepare.epub.reader import read_epub_bytes
 
-    epub_bytes = _epub_bytes_without_file(
-        build_minimal_epub(), "META-INF/container.xml"
-    )
+    epub_bytes = _epub_bytes_without_file(build_minimal_epub(), "META-INF/container.xml")
     with pytest.raises(NotAnEpub, match="container"):
         read_epub_bytes(epub_bytes)
 

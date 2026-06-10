@@ -28,9 +28,7 @@ import pytest
 from epub_deepl_prepare.cli import main as cli_main
 
 _EPUBCHECK = shutil.which("epubcheck")
-_MSG_PATTERN = re.compile(
-    r"(?P<f>\d+) fatals?\s*/\s*(?P<e>\d+) errors?\s*/\s*(?P<w>\d+) warnings?"
-)
+_MSG_PATTERN = re.compile(r"(?P<f>\d+) fatals?\s*/\s*(?P<e>\d+) errors?\s*/\s*(?P<w>\d+) warnings?")
 
 pytestmark = pytest.mark.epubcheck
 
@@ -71,9 +69,7 @@ def _roundtrip_without_translation(
     assert rc == 0, "prepare failed"
     # `restore` auto-detects target lang from <html lang> which the prepared
     # HTML inherited from the input's <dc:language>. Drift WARN expected.
-    rc = cli_main(
-        ["restore", str(input_epub), str(prepared_html), "--output", str(out_epub)]
-    )
+    rc = cli_main(["restore", str(input_epub), str(prepared_html), "--output", str(out_epub)])
     assert rc == 0, "restore failed"
     return out_epub
 
@@ -90,9 +86,7 @@ def test_roundtrip_zero_epubcheck_drift_synthetic(
     in_counts = _epubcheck_counts(synth_epub_file)
     out_path = _roundtrip_without_translation(synth_epub_file, tmp_path)
     out_counts = _epubcheck_counts(out_path)
-    assert in_counts == out_counts, (
-        f"epubcheck drift: IN={in_counts} OUT={out_counts}"
-    )
+    assert in_counts == out_counts, f"epubcheck drift: IN={in_counts} OUT={out_counts}"
 
 
 @pytest.mark.skipif(_EPUBCHECK is None, reason="epubcheck not installed")
@@ -108,6 +102,4 @@ def test_roundtrip_zero_epubcheck_drift_corpus(
     in_counts = _epubcheck_counts(corpus_epub)
     out_path = _roundtrip_without_translation(corpus_epub, tmp_path)
     out_counts = _epubcheck_counts(out_path)
-    assert in_counts == out_counts, (
-        f"{corpus_epub.name}: IN={in_counts} OUT={out_counts}"
-    )
+    assert in_counts == out_counts, f"{corpus_epub.name}: IN={in_counts} OUT={out_counts}"

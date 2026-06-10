@@ -168,7 +168,7 @@ def xpath_literal(s: str) -> str:
         return f'"{s}"'
     # Both quotes present: use XPath concat()
     parts = s.split("'")
-    joined = ", \"'\", ".join(f"'{p}'" for p in parts)
+    joined = ', "\'", '.join(f"'{p}'" for p in parts)
     return f"concat({joined})"
 
 

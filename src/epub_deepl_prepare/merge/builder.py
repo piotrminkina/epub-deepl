@@ -49,8 +49,7 @@ def build(epub: Epub) -> str:
         parts.append(f'<h1 data-dc="title">{html.escape(meta.titles[0])}</h1>\n')
         for i, extra_title in enumerate(meta.titles[1:], start=1):
             parts.append(
-                f'<h2 data-dc="title" data-dc-index="{i}">'
-                f"{html.escape(extra_title)}</h2>\n"
+                f'<h2 data-dc="title" data-dc-index="{i}">{html.escape(extra_title)}</h2>\n'
             )
     for desc in meta.descriptions:
         parts.append(f'<p data-dc="description">{html.escape(desc)}</p>\n')
@@ -81,15 +80,10 @@ def build(epub: Epub) -> str:
         # Extract per-file title for translator context
         xhtml_title = _extract_xhtml_title(xhtml_file.raw_bytes)
 
-        parts.append(
-            f'<section data-source-href="{html.escape(href)}" '
-            f'data-spine-idx="{idx}">\n'
-        )
+        parts.append(f'<section data-source-href="{html.escape(href)}" data-spine-idx="{idx}">\n')
         parts.append('<header data-section-meta="true">\n')
         if xhtml_title:
-            parts.append(
-                f'<h1 data-xhtml-title="true">{html.escape(xhtml_title)}</h1>\n'
-            )
+            parts.append(f'<h1 data-xhtml-title="true">{html.escape(xhtml_title)}</h1>\n')
         parts.append("</header>\n")
         parts.append(xhtml_file.body_html)
         parts.append("\n</section>\n")

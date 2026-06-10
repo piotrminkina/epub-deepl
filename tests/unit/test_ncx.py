@@ -157,9 +157,7 @@ def test_ncx_canonical_xml_manifest_preserved() -> None:
     new_nav = new_tree.find(f"{{{_NCX_NS}}}navMap")
     assert orig_nav is not None and new_nav is not None
     # content src attributes
-    for _tag, _orig_el, _new_el in zip(
-        ["content src"], [orig_nav], [new_nav], strict=False
-    ):
+    for _tag, _orig_el, _new_el in zip(["content src"], [orig_nav], [new_nav], strict=False):
         pass  # Just verify no exception
     # Check content src unchanged
     assert b'src="ch01.xhtml#h1"' in new_bytes

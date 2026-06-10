@@ -19,6 +19,7 @@ def _run_cli(args: list[str]) -> tuple[int, str]:
     with contextlib.redirect_stderr(stderr_buf):
         try:
             from epub_deepl_prepare.cli import main
+
             rc = main(args)
         except SystemExit as exc:
             rc = int(exc.code) if exc.code is not None else 0
@@ -34,14 +35,10 @@ def test_no_args_shows_usage_with_both_subcommands(capsys: pytest.CaptureFixture
 
 
 @pytest.mark.integration
-def test_prepare_emits_html_file(
-    synth_epub_file: pathlib.Path, tmp_path: pathlib.Path
-) -> None:
+def test_prepare_emits_html_file(synth_epub_file: pathlib.Path, tmp_path: pathlib.Path) -> None:
     """prepare creates a .prepare.html output file."""
     output = tmp_path / "test.prepare.html"
-    rc, stderr = _run_cli([
-        "prepare", str(synth_epub_file), "--output", str(output)
-    ])
+    rc, stderr = _run_cli(["prepare", str(synth_epub_file), "--output", str(output)])
     assert rc == 0, f"Expected exit 0, got {rc}. Stderr: {stderr}"
     assert output.exists()
 
@@ -128,19 +125,16 @@ def test_prepare_writes_no_output_on_validation_failure(tmp_path: pathlib.Path) 
 
 
 @pytest.mark.integration
-def test_restore_emits_epub_file(
-    synth_epub_file: pathlib.Path, tmp_path: pathlib.Path
-) -> None:
+def test_restore_emits_epub_file(synth_epub_file: pathlib.Path, tmp_path: pathlib.Path) -> None:
     """restore creates a .translated.epub output file."""
     html_out = tmp_path / "prepared.html"
     rc, _ = _run_cli(["prepare", str(synth_epub_file), "--output", str(html_out)])
     assert rc == 0
 
     epub_out = tmp_path / "output.epub"
-    rc2, stderr = _run_cli([
-        "restore", str(synth_epub_file), str(html_out),
-        "--lang", "pl", "--output", str(epub_out)
-    ])
+    rc2, stderr = _run_cli(
+        ["restore", str(synth_epub_file), str(html_out), "--lang", "pl", "--output", str(epub_out)]
+    )
     assert rc2 == 0, f"Expected exit 0, got {rc2}. Stderr: {stderr}"
     assert epub_out.exists()
 
@@ -152,10 +146,9 @@ def test_restore_exit_code_0_on_success(
     html_out = tmp_path / "prepared.html"
     _run_cli(["prepare", str(synth_epub_file), "--output", str(html_out)])
     epub_out = tmp_path / "output.epub"
-    rc, _ = _run_cli([
-        "restore", str(synth_epub_file), str(html_out),
-        "--lang", "en", "--output", str(epub_out)
-    ])
+    rc, _ = _run_cli(
+        ["restore", str(synth_epub_file), str(html_out), "--lang", "en", "--output", str(epub_out)]
+    )
     assert rc == 0
 
 
@@ -169,10 +162,7 @@ def test_restore_exit_code_1_on_translated_html_mismatch(
     bad_html.write_text(
         "<!DOCTYPE html><html><head><title>T</title></head><body><p>x</p></body></html>"
     )
-    rc, stderr = _run_cli([
-        "restore", str(synth_epub_file), str(bad_html),
-        "--lang", "pl"
-    ])
+    rc, stderr = _run_cli(["restore", str(synth_epub_file), str(bad_html), "--lang", "pl"])
     assert rc == 1
     assert "[ERROR]" in stderr
 
@@ -197,9 +187,7 @@ def test_default_output_naming_restore(
     """restore default output is <stem>.translated.epub in same directory."""
     html_out = tmp_path / "book.prepare.html"
     _run_cli(["prepare", str(synth_epub_file), "--output", str(html_out)])
-    rc, _ = _run_cli([
-        "restore", str(synth_epub_file), str(html_out), "--lang", "pl"
-    ])
+    rc, _ = _run_cli(["restore", str(synth_epub_file), str(html_out), "--lang", "pl"])
     expected = synth_epub_file.parent / f"{synth_epub_file.stem}.translated.epub"
     assert rc == 0
     assert expected.exists()
@@ -241,9 +229,7 @@ def test_existing_output_with_force_overwrites(
     """With --force, existing output is overwritten."""
     output = tmp_path / "out.html"
     output.write_text("old content")
-    rc, _ = _run_cli([
-        "prepare", str(synth_epub_file), "--output", str(output), "--force"
-    ])
+    rc, _ = _run_cli(["prepare", str(synth_epub_file), "--output", str(output), "--force"])
     assert rc == 0
     assert output.read_text() != "old content"
 
@@ -256,7 +242,7 @@ def test_ruby_annotations_emit_warning_to_stderr(tmp_path: pathlib.Path) -> None
             XhtmlSpec(
                 href="ch01.xhtml",
                 title="Ruby Chapter",
-                body_html='<p><ruby>漢<rt>kan</rt></ruby>字</p>',
+                body_html="<p><ruby>漢<rt>kan</rt></ruby>字</p>",
             )
         ],
         nav_map=[],
@@ -278,7 +264,7 @@ def test_ruby_does_not_affect_exit_code(tmp_path: pathlib.Path) -> None:
             XhtmlSpec(
                 href="ch01.xhtml",
                 title="Ruby",
-                body_html='<ruby>漢<rt>kan</rt></ruby>',
+                body_html="<ruby>漢<rt>kan</rt></ruby>",
             )
         ],
         nav_map=[],
@@ -295,6 +281,7 @@ def test_no_output_on_stdout_in_normal_run(
 ) -> None:
     """No output must appear on stdout during normal operation."""
     from epub_deepl_prepare.cli import main
+
     main(["prepare", str(synth_epub_file), "--output", str(tmp_path / "out.html")])
     captured = capsys.readouterr()
     assert captured.out == "", f"Unexpected stdout: {captured.out!r}"
@@ -322,9 +309,7 @@ def _prepare_then_set_html_lang(
         # Remove the lang attribute entirely
         content = content.replace('<html lang="en">', "<html>")
     else:
-        content = content.replace(
-            '<html lang="en">', f'<html lang="{new_lang}">'
-        )
+        content = content.replace('<html lang="en">', f'<html lang="{new_lang}">')
     html_out.write_text(content, encoding="utf-8")
     return html_out
 
@@ -337,15 +322,22 @@ def test_lang_auto_detected_from_translated_html(
     the translated HTML's <html lang> attribute (US-009)."""
     html = _prepare_then_set_html_lang(synth_epub_file, tmp_path, "pl")
     epub_out = tmp_path / "auto.epub"
-    rc, stderr = _run_cli([
-        "--verbose", "restore", str(synth_epub_file), str(html),
-        "--output", str(epub_out),
-    ])
+    rc, stderr = _run_cli(
+        [
+            "--verbose",
+            "restore",
+            str(synth_epub_file),
+            str(html),
+            "--output",
+            str(epub_out),
+        ]
+    )
     assert rc == 0
     assert "Auto-detected target language 'pl'" in stderr
 
     # Verify <dc:language>pl</dc:language> in the output OPF
     import zipfile
+
     with zipfile.ZipFile(epub_out) as zf:
         opf = next(n for n in zf.namelist() if n.endswith(".opf"))
         opf_bytes = zf.read(opf)
@@ -360,16 +352,24 @@ def test_lang_explicit_flag_overrides_detected_with_warning(
     value wins and a WARN is emitted naming both."""
     html = _prepare_then_set_html_lang(synth_epub_file, tmp_path, "pl")
     epub_out = tmp_path / "override.epub"
-    rc, stderr = _run_cli([
-        "restore", str(synth_epub_file), str(html),
-        "--lang", "de", "--output", str(epub_out),
-    ])
+    rc, stderr = _run_cli(
+        [
+            "restore",
+            str(synth_epub_file),
+            str(html),
+            "--lang",
+            "de",
+            "--output",
+            str(epub_out),
+        ]
+    )
     assert rc == 0
     assert "[WARN]" in stderr
     assert "'de'" in stderr and "'pl'" in stderr
     assert "overrides" in stderr
 
     import zipfile
+
     with zipfile.ZipFile(epub_out) as zf:
         opf = next(n for n in zf.namelist() if n.endswith(".opf"))
         opf_bytes = zf.read(opf)
@@ -384,12 +384,18 @@ def test_lang_region_subtag_passed_through_to_opf(
     EPUB OPF uses the same grammar as HTML5 lang)."""
     html = _prepare_then_set_html_lang(synth_epub_file, tmp_path, "pt-BR")
     epub_out = tmp_path / "region.epub"
-    rc, _ = _run_cli([
-        "restore", str(synth_epub_file), str(html),
-        "--output", str(epub_out),
-    ])
+    rc, _ = _run_cli(
+        [
+            "restore",
+            str(synth_epub_file),
+            str(html),
+            "--output",
+            str(epub_out),
+        ]
+    )
     assert rc == 0
     import zipfile
+
     with zipfile.ZipFile(epub_out) as zf:
         opf = next(n for n in zf.namelist() if n.endswith(".opf"))
         opf_bytes = zf.read(opf)
@@ -402,10 +408,15 @@ def test_lang_missing_in_html_and_no_flag_raises(
 ) -> None:
     """Both <html lang> absent AND --lang omitted → exit 1 with hint."""
     html = _prepare_then_set_html_lang(synth_epub_file, tmp_path, None)
-    rc, stderr = _run_cli([
-        "restore", str(synth_epub_file), str(html),
-        "--output", str(tmp_path / "fail.epub"),
-    ])
+    rc, stderr = _run_cli(
+        [
+            "restore",
+            str(synth_epub_file),
+            str(html),
+            "--output",
+            str(tmp_path / "fail.epub"),
+        ]
+    )
     assert rc == 1
     assert "[ERROR]" in stderr
     assert "--lang" in stderr
@@ -418,10 +429,15 @@ def test_lang_whitespace_only_in_html_treated_as_missing(
     """A whitespace-only <html lang="   "> is treated as missing per EPUB
     spec's trim-before-process rule."""
     html = _prepare_then_set_html_lang(synth_epub_file, tmp_path, "   ")
-    rc, stderr = _run_cli([
-        "restore", str(synth_epub_file), str(html),
-        "--output", str(tmp_path / "ws.epub"),
-    ])
+    rc, stderr = _run_cli(
+        [
+            "restore",
+            str(synth_epub_file),
+            str(html),
+            "--output",
+            str(tmp_path / "ws.epub"),
+        ]
+    )
     assert rc == 1
     assert "--lang" in stderr
 
@@ -432,11 +448,17 @@ def test_lang_malformed_explicit_flag_rejected(
 ) -> None:
     """A malformed --lang value fails fast with a clear message."""
     html = _prepare_then_set_html_lang(synth_epub_file, tmp_path, "pl")
-    rc, stderr = _run_cli([
-        "restore", str(synth_epub_file), str(html),
-        "--lang", "not a tag",
-        "--output", str(tmp_path / "bad.epub"),
-    ])
+    rc, stderr = _run_cli(
+        [
+            "restore",
+            str(synth_epub_file),
+            str(html),
+            "--lang",
+            "not a tag",
+            "--output",
+            str(tmp_path / "bad.epub"),
+        ]
+    )
     assert rc == 1
     assert "[ERROR]" in stderr
     assert "well-formed BCP 47" in stderr
@@ -451,10 +473,15 @@ def test_lang_drift_warning_when_primary_subtag_unchanged(
     the translated HTML to 'en-GB' to keep the primary identical."""
     html = _prepare_then_set_html_lang(synth_epub_file, tmp_path, "en-GB")
     epub_out = tmp_path / "drift.epub"
-    rc, stderr = _run_cli([
-        "restore", str(synth_epub_file), str(html),
-        "--output", str(epub_out),
-    ])
+    rc, stderr = _run_cli(
+        [
+            "restore",
+            str(synth_epub_file),
+            str(html),
+            "--output",
+            str(epub_out),
+        ]
+    )
     assert rc == 0
     assert "[WARN]" in stderr
     assert "primary subtag matches" in stderr
@@ -467,9 +494,14 @@ def test_lang_no_drift_warning_when_primary_subtag_changes(
     """Source is 'en', target 'pl' — different primary subtag, no drift."""
     html = _prepare_then_set_html_lang(synth_epub_file, tmp_path, "pl")
     epub_out = tmp_path / "nodrift.epub"
-    rc, stderr = _run_cli([
-        "restore", str(synth_epub_file), str(html),
-        "--output", str(epub_out),
-    ])
+    rc, stderr = _run_cli(
+        [
+            "restore",
+            str(synth_epub_file),
+            str(html),
+            "--output",
+            str(epub_out),
+        ]
+    )
     assert rc == 0
     assert "primary subtag matches" not in stderr

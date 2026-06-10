@@ -56,9 +56,7 @@ def test_mimetype_has_no_extra_field() -> None:
     epub_bytes = _write_test_epub()
     with zipfile.ZipFile(io.BytesIO(epub_bytes)) as zf:
         info = zf.getinfo("mimetype")
-    assert info.extra == b"", (
-        f"mimetype has extra field bytes: {info.extra!r}"
-    )
+    assert info.extra == b"", f"mimetype has extra field bytes: {info.extra!r}"
 
 
 @pytest.mark.unit
@@ -88,9 +86,7 @@ def test_mimetype_general_purpose_flag_zero() -> None:
     offset = epub_bytes.find(sig)
     assert offset != -1, "No local file header found in ZIP"
     flag_bits = struct.unpack_from("<H", epub_bytes, offset + 6)[0]
-    assert flag_bits == 0, (
-        f"mimetype local file header flag_bits={flag_bits:#06x}, expected 0"
-    )
+    assert flag_bits == 0, f"mimetype local file header flag_bits={flag_bits:#06x}, expected 0"
 
 
 @pytest.mark.unit

@@ -59,9 +59,7 @@ def _read_from_zipfile(zf: zipfile.ZipFile) -> Epub:
     # Zip-bomb guard
     total_size = sum(info.file_size for info in zf.infolist())
     if total_size > _MAX_EPUB_SIZE_BYTES:
-        raise NotAnEpub(
-            f"EPUB exceeds size cap ({total_size} > {_MAX_EPUB_SIZE_BYTES} bytes)"
-        )
+        raise NotAnEpub(f"EPUB exceeds size cap ({total_size} > {_MAX_EPUB_SIZE_BYTES} bytes)")
 
     # DRM check (before any other processing)
     if "META-INF/encryption.xml" in names:
@@ -72,9 +70,7 @@ def _read_from_zipfile(zf: zipfile.ZipFile) -> Epub:
         raise NotAnEpub("Missing mimetype entry")
     mimetype_content = zf.read("mimetype").rstrip(b"\n").rstrip(b"\r\n")
     if mimetype_content != b"application/epub+zip":
-        raise NotAnEpub(
-            f"mimetype is not application/epub+zip (got {mimetype_content!r})"
-        )
+        raise NotAnEpub(f"mimetype is not application/epub+zip (got {mimetype_content!r})")
 
     # container.xml
     if "META-INF/container.xml" not in names:
@@ -177,9 +173,7 @@ def _validate_epub_version(opf_bytes: bytes) -> None:
 
     version = root.get("version", "")
     if not version.startswith("2"):
-        raise NotAnEpub(
-            f"Unsupported EPUB version {version!r} (only 2.x is supported)"
-        )
+        raise NotAnEpub(f"Unsupported EPUB version {version!r} (only 2.x is supported)")
 
 
 def _join_opf(opf_dir: str, href: str) -> str:

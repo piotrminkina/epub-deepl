@@ -139,9 +139,7 @@ def _extract_section_body(section: etree._Element) -> str:
         # Skip the injected section-meta header
         if child.get("data-section-meta") == "true":
             continue
-        parts.append(
-            etree.tostring(child, method="html", encoding="unicode", with_tail=True)
-        )
+        parts.append(etree.tostring(child, method="html", encoding="unicode", with_tail=True))
     # Also include text before first child if present
     if section.text and section.text.strip():
         parts.insert(0, section.text)

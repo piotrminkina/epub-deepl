@@ -38,9 +38,7 @@ def check_output_not_input(output_path: str, *input_paths: str) -> None:
     resolved_out = pathlib.Path(output_path).resolve()
     for inp in input_paths:
         if pathlib.Path(inp).resolve() == resolved_out:
-            raise OutputEqualsInput(
-                f"Output path equals input path: {output_path!r}"
-            )
+            raise OutputEqualsInput(f"Output path equals input path: {output_path!r}")
 
 
 def validate_epub(epub: Epub) -> None:
@@ -75,7 +73,7 @@ def _check_manifest_files(epub: Epub) -> None:
     # Add other_files paths converted to OPF-relative
     for zip_path in epub.other_files:
         if epub.opf_dir and zip_path.startswith(epub.opf_dir + "/"):
-            rel = zip_path[len(epub.opf_dir) + 1:]
+            rel = zip_path[len(epub.opf_dir) + 1 :]
             all_zip_paths.add(rel)
         else:
             all_zip_paths.add(zip_path)
@@ -84,7 +82,7 @@ def _check_manifest_files(epub: Epub) -> None:
     if epub.ncx is not None:
         ncx_zip = epub.ncx.ncx_href_in_zip
         if epub.opf_dir and ncx_zip.startswith(epub.opf_dir + "/"):
-            all_zip_paths.add(ncx_zip[len(epub.opf_dir) + 1:])
+            all_zip_paths.add(ncx_zip[len(epub.opf_dir) + 1 :])
 
     missing: list[str] = []
     for item in epub.manifest.values():
@@ -99,10 +97,7 @@ def _check_manifest_files(epub: Epub) -> None:
             full = posixpath.join(epub.opf_dir, href) if epub.opf_dir else href
             found_in_other = full in epub.other_files
             found_in_xhtmls = href in epub.xhtmls
-            found_in_ncx = (
-                epub.ncx is not None
-                and epub.ncx.ncx_href_in_zip in (full, href)
-            )
+            found_in_ncx = epub.ncx is not None and epub.ncx.ncx_href_in_zip in (full, href)
             if not (found_in_other or found_in_xhtmls or found_in_ncx):
                 missing.append(href)
 
@@ -163,15 +158,11 @@ def validate_translated_html(epub: Epub, sections: dict[str, str]) -> None:
     """
     # All spine XHTML hrefs must have a matching section
     spine_hrefs = {
-        epub.manifest[ref.idref].href
-        for ref in epub.spine.items
-        if ref.idref in epub.manifest
+        epub.manifest[ref.idref].href for ref in epub.spine.items if ref.idref in epub.manifest
     }
     missing = spine_hrefs - set(sections.keys())
     if missing:
-        raise TranslatedHtmlMismatch(
-            f"Missing sections in translated HTML: {sorted(missing)}"
-        )
+        raise TranslatedHtmlMismatch(f"Missing sections in translated HTML: {sorted(missing)}")
 
     # No unknown sections
     unknown = set(sections.keys()) - spine_hrefs

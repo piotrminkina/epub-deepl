@@ -62,6 +62,7 @@ def test_parser_blocks_network_access() -> None:
 <root/>"""
     try:
         from epub_deepl_prepare.epub._safe_parser import parse_xml
+
         parse_xml(xml_with_system)
     except (etree.XMLSyntaxError, OSError):
         pass  # Network blocked or DTD rejected — correct behaviour

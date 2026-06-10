@@ -81,9 +81,7 @@ def _inner_html(element: etree._Element) -> str:
     if element.text:
         parts.append(element.text)
     for child in element:
-        parts.append(
-            etree.tostring(child, method="html", encoding="unicode", with_tail=True)
-        )
+        parts.append(etree.tostring(child, method="html", encoding="unicode", with_tail=True))
     return "".join(parts)
 
 

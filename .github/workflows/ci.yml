@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+# Cancel in-flight runs for the same ref so a rapid push sequence does not
+# pile up redundant work.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Lint, type-check, fast tests across the supported Python minors.
+  # No epubcheck dependency here — that's the next job. Failure on any cell
+  # of the matrix blocks the merge.
+  # ---------------------------------------------------------------------------
+  quality:
+    name: quality (python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install project (editable + dev extras)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+
+      - name: Lint
+        run: ruff check src tests
+
+      - name: Format check
+        run: ruff format --check src tests
+
+      - name: Type check
+        run: mypy --strict src/epub_deepl_prepare
+
+      - name: Unit + synth integration tests
+        # corpus tests are skipped (no /tmp/nowe in CI); epubcheck tests are
+        # exercised in the dedicated job below to keep this matrix Java-free.
+        run: pytest -m "not corpus and not epubcheck" --tb=short
+
+  # ---------------------------------------------------------------------------
+  # Runs the `epubcheck`-marked tests on synthetic fixtures only.
+  # epubcheck needs a JRE, so this is a single Python cell to keep CI minutes
+  # in check; the bug classes this catches (SVG case, structural drift) are
+  # not Python-version-sensitive.
+  # ---------------------------------------------------------------------------
+  epubcheck:
+    name: epubcheck (synthetic fixtures)
+    runs-on: ubuntu-latest
+    needs: quality
+    env:
+      EPUBCHECK_VERSION: "5.1.0"
+      EPUBCHECK_SHA256: "74a59af8602bf59b1d04266a450d9cdcb5986e36d825adc403cde0d95e88c9e8"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JRE
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install epubcheck (pinned + hash-verified)
+        run: |
+          set -euo pipefail
+          curl -fsSL \
+            "https://github.com/w3c/epubcheck/releases/download/v${EPUBCHECK_VERSION}/epubcheck-${EPUBCHECK_VERSION}.zip" \
+            -o /tmp/epubcheck.zip
+          printf '%s  /tmp/epubcheck.zip\n' "$EPUBCHECK_SHA256" | sha256sum -c -
+          sudo unzip -q /tmp/epubcheck.zip -d /opt
+          sudo ln -sfn "/opt/epubcheck-${EPUBCHECK_VERSION}" /opt/epubcheck
+          printf '#!/bin/sh\nexec java -jar /opt/epubcheck/epubcheck.jar "$@"\n' \
+            | sudo tee /usr/local/bin/epubcheck > /dev/null
+          sudo chmod +x /usr/local/bin/epubcheck
+          epubcheck --version
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install project
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+
+      - name: Run epubcheck-marked tests (synthetic only — no corpus)
+        run: pytest -m "epubcheck and not corpus" --tb=short

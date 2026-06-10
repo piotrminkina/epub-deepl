@@ -95,6 +95,7 @@ def test_set_language_removes_extras_when_multiple() -> None:
     epub = read_epub_bytes(build_minimal_epub(languages=["en", "de"]))
     new_bytes = rebuild_opf_bytes(epub.opf_raw_xml, epub.metadata, "pl")
     from epub_deepl_prepare.epub.opf import parse_metadata
+
     rebuilt = parse_metadata(new_bytes)
     assert rebuilt.language == "pl"
     # Should have exactly one language element
@@ -162,6 +163,7 @@ def test_opf_serialization_preserves_manifest_and_spine() -> None:
     # Extract the OPF bytes
     import io
     import zipfile
+
     with zipfile.ZipFile(io.BytesIO(opf)) as zf:
         opf_bytes = zf.read("OEBPS/content.opf")
 
@@ -186,13 +188,11 @@ def test_opf_serialization_preserves_manifest_and_spine() -> None:
         # c14n2 on a subtree element fails when namespace declarations live on
         # ancestor elements. Compare manifest items structurally instead.
         orig_items = sorted(
-            [(el.get("id"), el.get("href"), el.get("media-type"))
-             for el in orig_manifest_el],
+            [(el.get("id"), el.get("href"), el.get("media-type")) for el in orig_manifest_el],
             key=lambda t: t[0] or "",
         )
         new_items = sorted(
-            [(el.get("id"), el.get("href"), el.get("media-type"))
-             for el in new_manifest_el],
+            [(el.get("id"), el.get("href"), el.get("media-type")) for el in new_manifest_el],
             key=lambda t: t[0] or "",
         )
         assert orig_items == new_items, "Manifest items changed after rebuild"
