@@ -104,9 +104,14 @@ tagged.
   CONTRIBUTING.md.** The user path no longer requires the Dev
   Container; install via `pip install -e .` works on any host with
   Python 3.11+ and the `lxml` build deps.
+- **Multiple `dc:language` elements are no longer collapsed to one;
+  the first is set to the target language and extras are preserved.**
 
 ### Fixed
 
+- **OPF metadata rebuild dropped attributes (`id`, `xml:lang`,
+  `opf:*`) from `dc:title`/`dc:description`/`dc:subject`, orphaning
+  EPUB 3 `refines` metadata; text is now mutated in place.**
 - **UTF-8 mojibake on non-ASCII body content.** `lxml.html.HTMLParser`
   was defaulting to ISO-8859-1 (HTML4 historical) when parsing the
   body-fragment wrapper, double-encoding Polish/CJK/Cyrillic bytes
