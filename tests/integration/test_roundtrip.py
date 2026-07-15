@@ -1034,3 +1034,90 @@ def test_split_roundtrip_survives_simulated_translation_across_parts() -> None:
         text = _text_content_of_xhtml(output, f"ch{i:02d}.xhtml")
         assert "«PL»" in text
         assert f"unique-marker-{i}" in text
+
+
+# ---------------------------------------------------------------------------
+# Embedded SVG attribute case (US-022 / FR-6)
+# ---------------------------------------------------------------------------
+
+
+def _inline_svg_epub_bytes() -> bytes:
+    """EPUB 3 with one chapter embedding inline SVG whose attributes are
+    case-sensitive per the SVG spec. The manifest item declares
+    `properties="svg"` so the fixture is epubcheck-clean by construction."""
+    return build_minimal_epub(
+        epub_version="3.0",
+        xhtmls=[
+            XhtmlSpec(
+                href="ch01.xhtml",
+                title="Chapter 1",
+                body_html=(
+                    '<h1 id="c1">Chapter One</h1>'
+                    '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" '
+                    'viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">'
+                    '<rect width="100" height="100"/></svg>'
+                ),
+                properties="svg",
+            )
+        ],
+        nav_map=[NavPointSpec(label="Chapter One", src="ch01.xhtml#c1")],
+    )
+
+
+@pytest.mark.integration
+def test_prepare_payload_keeps_svg_attribute_case() -> None:
+    """The merged payload uploaded to DeepL carries valid camelCase SVG
+    attribute names — prepare extracts through the XML parser, which never
+    lowercases. (The restore-side counterpart is the round-trip test below.)
+    """
+    from epub_deepl.epub.reader import read_epub_bytes
+    from epub_deepl.merge.builder import build
+
+    epub = read_epub_bytes(_inline_svg_epub_bytes())
+    merged = build(epub)
+
+    assert 'viewBox="0 0 100 100"' in merged
+    assert 'preserveAspectRatio="xMidYMid meet"' in merged
+    assert "viewbox=" not in merged
+    assert "preserveaspectratio=" not in merged
+
+
+@pytest.mark.integration
+def test_roundtrip_svg_attribute_case_preserved() -> None:
+    """US-022: inline SVG camelCase attributes survive the full round-trip.
+
+    restore parses translated content with the lowercasing HTML parser, so
+    this exercises `restore_svg_attribute_case` on the real pipeline rather
+    than in isolation.
+    """
+    output = _roundtrip(_inline_svg_epub_bytes())
+    _check_zip_invariants(output)
+
+    xhtml = _text_content_of_xhtml(output, "ch01.xhtml")
+    assert 'viewBox="0 0 100 100"' in xhtml
+    assert 'preserveAspectRatio="xMidYMid meet"' in xhtml
+    assert "viewbox=" not in xhtml
+    assert "preserveaspectratio=" not in xhtml
+
+
+@pytest.mark.integration
+def test_roundtrip_svg_attribute_case_survives_simulated_translation() -> None:
+    """US-022 under the friendly «PL» transform: text nodes change, SVG
+    attribute names and values must not."""
+    from epub_deepl.epub.reader import read_epub_bytes
+    from epub_deepl.merge.builder import build
+    from epub_deepl.restore.applier import apply_and_write_bytes
+    from epub_deepl.restore.parser import parse_translated_html_bytes
+
+    epub = read_epub_bytes(_inline_svg_epub_bytes())
+    merged = _simulated_translation(build(epub))
+    doc = parse_translated_html_bytes(merged.encode("utf-8"))
+    output = apply_and_write_bytes(epub, doc, "pl")
+    _check_zip_invariants(output)
+
+    xhtml = _text_content_of_xhtml(output, "ch01.xhtml")
+    assert "«PL»" in xhtml
+    assert 'viewBox="0 0 100 100"' in xhtml
+    assert 'preserveAspectRatio="xMidYMid meet"' in xhtml
+    assert "viewbox=" not in xhtml
+    assert "preserveaspectratio=" not in xhtml

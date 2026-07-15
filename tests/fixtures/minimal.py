@@ -172,6 +172,9 @@ class XhtmlSpec:
     title: str = "Chapter"
     body_html: str = "<p>Content</p>"
     lang: str = "en"
+    # Manifest item `properties` tokens, e.g. "svg" for a chapter embedding
+    # inline SVG (EPUB 3 mandates the declaration; epubcheck OPF-014).
+    properties: str = ""
 
 
 @dataclass
@@ -351,9 +354,10 @@ def build_minimal_epub(
     if include_css:
         manifest_lines.append('    <item id="css" href="stylesheet.css" media-type="text/css"/>')
     for i, xhtml in enumerate(xhtmls):
+        props_attr = f' properties="{xhtml.properties}"' if xhtml.properties else ""
         manifest_lines.append(
             f'    <item id="chapter{i + 1}" href="{xhtml.href}" '
-            f'media-type="application/xhtml+xml"/>'
+            f'media-type="application/xhtml+xml"{props_attr}/>'
         )
     if nav_doc_enabled:
         manifest_lines.append(

@@ -250,3 +250,44 @@ def test_roundtrip_zero_epubcheck_drift_corpus(
     out_path = _roundtrip_without_translation(corpus_epub, tmp_path)
     out_counts = _epubcheck_counts(out_path)
     assert in_counts == out_counts, f"{corpus_epub.name}: IN={in_counts} OUT={out_counts}"
+
+
+@pytest.mark.skipif(_EPUBCHECK is None, reason="epubcheck not installed")
+@pytest.mark.integration
+def test_roundtrip_zero_epubcheck_drift_synthetic_epub3_inline_svg(
+    tmp_path: pathlib.Path,
+) -> None:
+    """US-022: a chapter embedding inline SVG (camelCase viewBox /
+    preserveAspectRatio, manifest `properties="svg"`) round-trips with zero
+    new epubcheck findings. epubcheck — not the internal attribute mapping —
+    is the external arbiter that restored attribute case is spec-valid: a
+    lowercased `viewbox` in the output shows up here as an error.
+    """
+    epub_path = tmp_path / "epub3_inline_svg.epub"
+    epub_path.write_bytes(
+        build_minimal_epub(
+            epub_version="3.0",
+            xhtmls=[
+                XhtmlSpec(
+                    href="ch01.xhtml",
+                    title="Chapter 1",
+                    body_html=(
+                        '<h1 id="c1">Chapter One</h1>'
+                        '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" '
+                        'viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">'
+                        '<rect width="100" height="100"/></svg>'
+                    ),
+                    properties="svg",
+                )
+            ],
+            nav_map=[NavPointSpec(label="Chapter One", src="ch01.xhtml#c1")],
+        )
+    )
+    in_counts = _epubcheck_counts(epub_path)
+    # Guard the premise: with a broken (non-clean) input, zero-drift would
+    # tolerate a broken output too. Fatals and errors must be zero; warnings
+    # are tolerated to stay robust across epubcheck versions.
+    assert in_counts[:2] == (0, 0), f"fixture not epubcheck-clean: {in_counts}"
+    out_path = _roundtrip_without_translation(epub_path, tmp_path)
+    out_counts = _epubcheck_counts(out_path)
+    assert in_counts == out_counts, f"epubcheck drift: IN={in_counts} OUT={out_counts}"
