@@ -1,9 +1,10 @@
 # Product Requirements Document (PRD) — epub-deepl
 
-**Status:** Draft v1 (MVP)
+**Status:** v1.1 (MVP implemented)
 **Owner:** Solo developer (single user)
-**Last updated:** 2026-06-09
-**Related:** `tech-stack.md` (TBD), `tech-spec.md` (TBD), test plan (TBD)
+**Last updated:** 2026-07-15
+**Related:** [`tech-stack.md`](tech-stack.md), [`tech-spec.md`](tech-spec.md),
+[`test-plan.md`](test-plan.md), [ADRs 0001–0006](../adr/)
 
 ---
 
@@ -18,17 +19,21 @@ characters round-trip cleanly through Unicode.
 
 Mechanically, the tool bundles all human-facing content (XHTML body
 text, OPF metadata, NCX navigation labels) into a single HTML5
-document for upload to DeepL's document-translation feature, then
-reassembles a structurally-identical EPUB from the translated HTML
-using the original EPUB as the structural template.
+document for upload to DeepL's document-translation feature — split
+into multiple part files at chapter boundaries when the book exceeds
+DeepL's per-document character limit — then reassembles a
+structurally-identical EPUB from the translated HTML using the
+original EPUB as the structural template.
 
 Two subcommands of a single binary:
 
-- `prepare <input.epub>` — produces a single HTML payload for translation.
-- `restore <input.epub> <translated.html> [--lang <code>]` — produces
-  the translated EPUB, reusing the original EPUB as a structural template.
+- `prepare <input.epub>` — produces the HTML payload for translation:
+  one file, or `1ofN`…`NofN` part files for oversized books (FR-1).
+- `restore <input.epub> <translated.html>... [--lang <code>]` —
+  produces the translated EPUB from one or more translated payload
+  files, reusing the original EPUB as a structural template.
 
-The MVP targets EPUB 2.0.1 books with NCX-based navigation (the format
+The MVP targets EPUB 2.x books with NCX-based navigation (the format
 the maintainer's corpus is in), and now extends to reflowable EPUB 3.x
 books with nav-document navigation (NCX optional). Fixed-layout EPUB,
 SVG-in-spine content, and media overlays remain out of MVP scope.
@@ -98,12 +103,27 @@ per book as a consequence.
   DeepL to leave it untouched.
 - Output is written to `<input-stem>.prepare.html` in the input's directory
   unless `--output` overrides.
+- `--max-chars N` (default `900,000` — a ~10% margin under DeepL's
+  1,000,000-character per-document limit) bounds the size of a single
+  output file. A payload over the bound is split at section boundaries
+  into `<stem>.prepare.1ofN.html` … `<stem>.prepare.NofN.html`, packing
+  whole sections greedily in spine order; `--max-chars 0` disables
+  splitting; a single section that alone exceeds a fresh part's budget
+  is a user error. Full split semantics and acceptance criteria: US-021
+  and [ADR-0006](../adr/0006-auto-split-oversized-payloads.md).
 
 ### FR-2: `restore` subcommand
 
-- Inputs: original EPUB (as structural template), translated HTML, target
-  language code via `--lang`.
-- Parse the translated HTML; locate every `<section data-source-href="…">`.
+- Inputs: original EPUB (as structural template), one or more translated
+  HTML files (every part of a split payload, in any order), and an
+  optional target language code via `--lang` (resolution order: US-009).
+- Duplicate translated-file arguments (two arguments resolving to the
+  same path) are rejected before any processing.
+- Parse each translated HTML file; when more than one is given, merge
+  them into a single logical document. Sections are re-associated by
+  `data-source-href`, never by file position; the same
+  `data-source-href` appearing in two different files is an error.
+- Locate every `<section data-source-href="…">`.
 - Reconstruct each XHTML file by:
   - Reading the original file from the input EPUB.
   - Replacing the `<body>` content with the translated section's body.
@@ -134,8 +154,10 @@ per book as a consequence.
 
 ### FR-3: CLI surface
 
-- `epub-deepl prepare <input.epub> [--output FILE] [--force]`
-- `epub-deepl restore <input.epub> <translated.html> [--lang <code>] [--output FILE] [--force]`
+- `epub-deepl [--verbose] prepare <input.epub> [--output FILE] [--force] [--max-chars N]`
+- `epub-deepl [--verbose] restore <input.epub> <translated.html>... [--lang <code>] [--output FILE] [--force]`
+- `--max-chars` rejects negative values (user error) and warns when set
+  above DeepL's 1,000,000-character limit; `0` disables splitting.
 - `--lang` accepts a BCP 47 tag (e.g. `pl`, `en`, `de`, `pt-BR`). It is
   optional; auto-detected from the translated HTML's `<html lang>` when
   omitted. See US-009 for the full resolution order.
@@ -144,7 +166,7 @@ per book as a consequence.
 - Exit codes:
   - `0` — success.
   - `1` — user error (bad input, missing file, validation failure,
-    unsupported book).
+    unsupported book, a single section too large to fit any part).
   - `2` — internal error (unexpected exception).
 - All errors emit a structured `[ERROR] <message>` line to stderr.
 - Warnings emit `[WARN] <message>` to stderr and do not affect exit code.
@@ -185,17 +207,32 @@ Before producing any output, `prepare` must validate:
 - `--verbose` flag: per-file progress to stderr.
 - No logging to stdout (stdout is reserved for future structured output).
 
+### FR-6: Embedded SVG / MathML attribute-case restoration
+
+- HTML parsing (applied to translated content during `restore`)
+  lowercases every attribute name, while the SVG and MathML specs
+  mandate camelCase names (`viewBox`, `preserveAspectRatio`,
+  `attributeName`, …) that `epubcheck` rejects in lowercased form.
+- During `restore`, a closed enumeration of case-sensitive SVG 1.1 and
+  MathML 3 attribute names is renamed back to its spec-mandated form.
+- The rename is scoped to `<svg>` / `<math>` subtrees; attributes on
+  plain HTML elements (correctly lowercase) are never modified.
+- Applies to SVG/MathML embedded inside XHTML content documents. An SVG
+  document as its own spine item remains rejected (see §4).
+
 ---
 
 ## 4. Project Scope Boundaries
 
 ### In scope (MVP)
 
-- EPUB 2.0.1 with NCX-based navigation.
+- EPUB 2.x with NCX-based navigation.
 - Reflowable EPUB 3.x with nav-document navigation (NCX optional; both
   kept in sync when present).
 - Round-trip preservation of all human-visible content and OPF/NCX
   structural metadata required by e-readers.
+- Embedded (inline-in-XHTML) SVG and MathML round-trip with
+  spec-mandated camelCase attribute names restored (FR-6, US-022).
 - DeepL HTML document compatibility (output is HTML5 that DeepL accepts
   as a translatable document).
 - Solo-user CLI workflow with manual upload/download to DeepL.
@@ -205,8 +242,10 @@ Before producing any output, `prepare` must validate:
 
 ### Out of scope
 
-- Fixed-layout EPUB, SVG-in-spine spine items, and EPUB media overlays
-  — rejected regardless of EPUB version.
+- Fixed-layout EPUB, SVG-in-spine spine items (an SVG document as its
+  own spine entry — distinct from SVG *embedded in XHTML*, which is
+  supported per FR-6), and EPUB media overlays — rejected regardless
+  of EPUB version.
 - DRM-protected EPUBs — detected and rejected, never supported.
 - Automatic invocation of the DeepL API (user uploads/downloads manually).
 - Automatic invocation of `epubcheck` (manual user step).
@@ -463,17 +502,20 @@ without external documentation.
 - Each subcommand's `--help` lists every flag with its description and
   default value.
 
-### US-016: Output validity (manual verification)
+### US-016: Output validity (epubcheck zero-drift)
 
 **Description:** As the user, I want my translated books to be valid
 EPUBs accepted by every reader.
 
 **Acceptance criteria:**
 
-- For every test corpus EPUB that passes `epubcheck` before processing,
-  the output of the round-trip-without-translation case also passes
-  `epubcheck` with no errors. (Verification is manual; the tool itself
-  does not invoke `epubcheck`.)
+- For every test corpus EPUB, the round-trip-without-translation output
+  introduces no `epubcheck` errors beyond the input's own baseline
+  (zero drift).
+- The zero-drift check is automated: a dedicated CI job with a JRE runs
+  `epubcheck` against synthetic fixtures and every corpus book.
+- The tool itself never invokes `epubcheck` at runtime; validity of
+  real translated output (post-DeepL) remains a manual spot-check.
 
 ### US-017: Authentication / authorization (not applicable)
 
@@ -562,6 +604,23 @@ without hand-splitting the EPUB myself.
 - If a required section is missing from the combined set of translated
   files, `restore` exits `1` naming the missing section(s), identical to
   today's single-file behavior.
+
+### US-022: Embedded SVG survives the round-trip with valid attribute case
+
+**Description:** As the user, I want illustrations drawn as inline SVG
+(and MathML formulas) to still render and validate after translation,
+even though HTML parsers lowercase attribute names.
+
+**Acceptance criteria:**
+
+- Given an XHTML spine file containing an inline
+  `<svg viewBox="…" preserveAspectRatio="…">`, after `prepare` +
+  `restore` the restored XHTML carries `viewBox` and
+  `preserveAspectRatio` in exactly this camelCase form.
+- The rename is scoped to `<svg>` / `<math>` subtrees; attributes on
+  plain HTML elements outside those subtrees are unchanged.
+- A round-tripped book containing embedded SVG passes `epubcheck` with
+  no new attribute-case errors.
 
 ---
 
