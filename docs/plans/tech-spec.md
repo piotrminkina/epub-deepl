@@ -905,6 +905,7 @@ passes `epubcheck` in a manual integration check.
 |---|---|
 | File exists and is readable | `UserError("File not found / not readable")` |
 | File is a valid ZIP | `NotAnEpub("Not a ZIP archive")` |
+| Total uncompressed size ≤ 500 MB (zip-bomb guard; enforced by the reader before any parsing) | `NotAnEpub("EPUB exceeds size cap (N > M bytes)")` |
 | ZIP contains `mimetype` | `NotAnEpub("Missing mimetype entry")` |
 | `mimetype` content correct | `NotAnEpub("mimetype is not application/epub+zip")` |
 | ZIP contains `META-INF/container.xml` | `NotAnEpub("Missing container.xml")` |
@@ -980,9 +981,12 @@ codebase).
 
 `zipfile` is vulnerable to zip bombs (massively-deflated entries).
 Mitigation: **input EPUB total uncompressed size** is checked against a
-hard cap of 500 MB (configurable via `--max-size` flag, defaults
-sufficient for any legitimate book). Exceeding the cap raises
-`UserError("EPUB exceeds size cap")`.
+hard cap of 500 MB (`_MAX_EPUB_SIZE_BYTES` in `epub/reader.py`, checked
+before any parsing). The cap is a constant, not a flag: 500 MB sits far
+above any legitimate book, so configurability would be dead weight — a
+`--max-size` flag can be added post-MVP if a real corpus ever needs it.
+Exceeding the cap raises `NotAnEpub("EPUB exceeds size cap …")`, a
+`ValidationError` subclass (exit 1).
 
 ### Path traversal in ZIP entries
 

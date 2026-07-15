@@ -176,6 +176,9 @@ per book as a consequence.
 Before producing any output, `prepare` must validate:
 
 - File is a readable ZIP archive.
+- Total uncompressed size of all ZIP entries is at or below a hard
+  500 MB cap (zip-bomb guard, checked before any parsing). Exceeding
+  the cap is a validation failure.
 - ZIP contains `mimetype` and `META-INF/container.xml`.
 - `mimetype` content is exactly `application/epub+zip`.
 - `META-INF/container.xml` references a valid OPF path.
@@ -650,6 +653,7 @@ even though HTML parsers lowercase attribute names.
 | R-6 | Encoding edge cases: BOM, declared non-UTF-8 encoding, smart-quote substitution by DeepL | Medium | Low–Medium | Force UTF-8 throughout; strip BOM on read; preserve XML declaration verbatim |
 | R-7 | OPF with non-standard extension namespaces (Apple, Kobo, Calibre custom metadata) | Low | Low | Restore uses input OPF as template; modifies only known-safe fields; unknown elements pass through untouched |
 | R-8 | DeepL strips or modifies `data-*` attributes on `<section>` markers | Low (DeepL documents preserving attributes) | Catastrophic (round-trip breaks) | Validate every `data-source-href` resolves during restore; fail-fast with clear message if any are missing |
+| R-9 | Malicious or corrupt input: zip bomb (massively-deflated ZIP entries) exhausts memory in the fully in-memory pipeline | Low | Medium | Hard 500 MB cap on total uncompressed size, checked before parsing; exceeding it fails validation with exit 1 (FR-4) |
 
 ---
 
