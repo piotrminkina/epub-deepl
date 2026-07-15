@@ -5,11 +5,18 @@ Structure mirrors tech-spec §4.3.
 
 NCX nav block is flattened into a single <ol> with data-ncx-depth to
 preserve hierarchy information without requiring DeepL to handle nesting.
+
+`build()` extracts a `_PayloadPlan` from the Epub model, then renders it
+into one document. The plan/render split exists so a future work package
+can pack `_PayloadSection`s across multiple payload documents (DeepL's
+per-document character limit) without touching the data-extraction logic
+here — see docs/adr/0006 (auto-split).
 """
 
 from __future__ import annotations
 
 import html
+from dataclasses import dataclass
 
 from epub_deepl.epub._safe_parser import parse_xml_recover
 from epub_deepl.epub.model import Epub, NavPoint
@@ -23,28 +30,107 @@ _log = get_logger("merge.builder")
 _XHTML_NS = "http://www.w3.org/1999/xhtml"
 
 
+@dataclass(frozen=True)
+class _PayloadSection:
+    """One fully-rendered `<section>` block, including its own open/close tags.
+
+    Pre-rendering the whole section (rather than storing raw body HTML) lets
+    a future packing step measure `len(html)` directly when distributing
+    sections across multiple payload documents.
+    """
+
+    href: str
+    html: str
+
+
+@dataclass(frozen=True)
+class _PayloadPlan:
+    """Everything needed to render one or more translation-payload documents.
+
+    `envelope_open`/`envelope_close` wrap every payload document.
+    `preamble` (OPF metadata header + NCX nav block) belongs to the first
+    document only. `sections` is the full ordered list — the non-spine
+    EPUB 3 nav doc (if any) first, then spine sections in spine order —
+    ready to be packed across one or more documents.
+    """
+
+    envelope_open: str
+    preamble: str
+    sections: list[_PayloadSection]
+    envelope_close: str
+
+
 def build(epub: Epub) -> str:
     """Produce the merged HTML5 string from the Epub model.
 
     Returns a complete HTML5 document as a string.
     """
+    return _render_single(_build_plan(epub))
+
+
+def _render_single(plan: _PayloadPlan) -> str:
+    """Render `plan` into one complete HTML5 document holding every section."""
+    parts = [plan.envelope_open, plan.preamble]
+    parts.extend(section.html for section in plan.sections)
+    parts.append(plan.envelope_close)
+    return "".join(parts)
+
+
+def _build_plan(epub: Epub) -> _PayloadPlan:
+    """Extract everything `_render_single` needs from `epub` into a `_PayloadPlan`."""
     meta = epub.metadata
     source_lang = meta.language or "und"
-    title = html.escape(meta.titles[0] if meta.titles else "")
-    description = html.escape(meta.descriptions[0] if meta.descriptions else "")
+    title = meta.titles[0] if meta.titles else ""
+    has_description = bool(meta.descriptions)
+    description = meta.descriptions[0] if meta.descriptions else ""
 
-    parts: list[str] = []
-    parts.append("<!DOCTYPE html>\n")
-    parts.append(f'<html lang="{html.escape(source_lang)}">\n')
-    parts.append("<head>\n")
-    parts.append('<meta charset="utf-8">\n')
-    parts.append(f"<title>{title}</title>\n")
-    if meta.descriptions:
-        parts.append(f'<meta name="description" content="{description}">\n')
+    return _PayloadPlan(
+        envelope_open=_body_open(source_lang, title, description, has_description, part=None),
+        preamble=_build_preamble(epub),
+        sections=_build_sections(epub),
+        envelope_close="</body>\n</html>\n",
+    )
+
+
+def _body_open(
+    source_lang: str,
+    title: str,
+    description: str,
+    has_description: bool,
+    part: tuple[int, int] | None,
+) -> str:
+    """Render the `<!DOCTYPE html>`…`<body>` opening block for one payload document.
+
+    `part` (`(index, total)`, 1-based) is reserved for a future multi-part
+    split: when given, it stamps `data-part`/`data-parts-total` onto `<body>`.
+    Today, `part` is always `None`, which reproduces the historical unmarked
+    `<body>\\n`.
+    """
+    parts = [
+        "<!DOCTYPE html>\n",
+        f'<html lang="{html.escape(source_lang)}">\n',
+        "<head>\n",
+        '<meta charset="utf-8">\n',
+        f"<title>{html.escape(title)}</title>\n",
+    ]
+    if has_description:
+        parts.append(f'<meta name="description" content="{html.escape(description)}">\n')
     parts.append("</head>\n")
-    parts.append("<body>\n")
+    if part is None:
+        parts.append("<body>\n")
+    else:
+        index, total = part
+        parts.append(f'<body data-part="{index}" data-parts-total="{total}">\n')
+    return "".join(parts)
 
-    # OPF metadata block
+
+def _build_preamble(epub: Epub) -> str:
+    """Render the OPF metadata header + NCX nav block (first-document-only)."""
+    meta = epub.metadata
+    parts: list[str] = []
+
+    # OPF metadata block — the <header> shell is always emitted, even when
+    # every dc:* list below is empty.
     parts.append('<header data-source="opf-metadata">\n')
     if meta.titles:
         parts.append(f'<h1 data-dc="title">{html.escape(meta.titles[0])}</h1>\n')
@@ -68,21 +154,19 @@ def build(epub: Epub) -> str:
         parts.append("</ol>\n")
         parts.append("</nav>\n")
 
+    return "".join(parts)
+
+
+def _build_sections(epub: Epub) -> list[_PayloadSection]:
+    """Return the ordered `_PayloadSection` list: non-spine nav doc first, then spine."""
+    sections: list[_PayloadSection] = []
+
     # EPUB 3 nav document — non-spine only. An in-spine nav doc is annotated
     # in place inside the spine loop below instead (it already gets a
     # <section data-source-href="…" data-spine-idx="…"> there); emitting it
     # here too would send it to DeepL twice.
     if epub.nav_doc is not None and not epub.nav_doc.in_spine:
-        nav_title = _extract_xhtml_title(epub.nav_doc.raw_bytes)
-        parts.append(
-            f'<section data-source-href="{html.escape(epub.nav_doc.href)}" data-nav-doc="true">\n'
-        )
-        parts.append('<header data-section-meta="true">\n')
-        if nav_title:
-            parts.append(f'<h1 data-xhtml-title="true">{html.escape(nav_title)}</h1>\n')
-        parts.append("</header>\n")
-        parts.append(extract_nav_body_html(epub.nav_doc.raw_bytes))
-        parts.append("\n</section>\n")
+        sections.append(_render_nav_doc_section(epub.nav_doc.href, epub.nav_doc.raw_bytes))
 
     # XHTML spine sections
     for idx, spine_ref in enumerate(epub.spine.items):
@@ -94,9 +178,6 @@ def build(epub: Epub) -> str:
         if xhtml_file is None:
             continue
 
-        # Extract per-file title for translator context
-        xhtml_title = _extract_xhtml_title(xhtml_file.raw_bytes)
-
         # An in-spine nav doc gets the same data-nav-doc marker and page-list
         # translate="no" treatment as its non-spine counterpart above, but
         # stays inline in spine order instead of a separate section — it is
@@ -104,28 +185,52 @@ def build(epub: Epub) -> str:
         is_in_spine_nav_doc = (
             epub.nav_doc is not None and epub.nav_doc.in_spine and epub.nav_doc.href == href
         )
-        nav_doc_attr = ' data-nav-doc="true"' if is_in_spine_nav_doc else ""
         section_body = (
             extract_nav_body_html(xhtml_file.raw_bytes)
             if is_in_spine_nav_doc
             else xhtml_file.body_html
         )
-
-        parts.append(
-            f'<section data-source-href="{html.escape(href)}" '
-            f'data-spine-idx="{idx}"{nav_doc_attr}>\n'
+        sections.append(
+            _render_spine_section(
+                href=href,
+                idx=idx,
+                is_nav_doc=is_in_spine_nav_doc,
+                title=_extract_xhtml_title(xhtml_file.raw_bytes),
+                body_html=section_body,
+            )
         )
-        parts.append('<header data-section-meta="true">\n')
-        if xhtml_title:
-            parts.append(f'<h1 data-xhtml-title="true">{html.escape(xhtml_title)}</h1>\n')
-        parts.append("</header>\n")
-        parts.append(section_body)
-        parts.append("\n</section>\n")
 
-    parts.append("</body>\n")
-    parts.append("</html>\n")
+    return sections
 
-    return "".join(parts)
+
+def _render_nav_doc_section(href: str, raw_bytes: bytes) -> _PayloadSection:
+    """Render the non-spine EPUB 3 nav document's own `<section>` block."""
+    nav_title = _extract_xhtml_title(raw_bytes)
+    parts = [f'<section data-source-href="{html.escape(href)}" data-nav-doc="true">\n']
+    parts.append('<header data-section-meta="true">\n')
+    if nav_title:
+        parts.append(f'<h1 data-xhtml-title="true">{html.escape(nav_title)}</h1>\n')
+    parts.append("</header>\n")
+    parts.append(extract_nav_body_html(raw_bytes))
+    parts.append("\n</section>\n")
+    return _PayloadSection(href=href, html="".join(parts))
+
+
+def _render_spine_section(
+    *, href: str, idx: int, is_nav_doc: bool, title: str, body_html: str
+) -> _PayloadSection:
+    """Render one spine item's `<section>` block."""
+    nav_doc_attr = ' data-nav-doc="true"' if is_nav_doc else ""
+    parts = [
+        f'<section data-source-href="{html.escape(href)}" data-spine-idx="{idx}"{nav_doc_attr}>\n',
+        '<header data-section-meta="true">\n',
+    ]
+    if title:
+        parts.append(f'<h1 data-xhtml-title="true">{html.escape(title)}</h1>\n')
+    parts.append("</header>\n")
+    parts.append(body_html)
+    parts.append("\n</section>\n")
+    return _PayloadSection(href=href, html="".join(parts))
 
 
 def _flatten_nav_map(
