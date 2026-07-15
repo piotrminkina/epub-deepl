@@ -134,6 +134,7 @@ def _run_prepare(args: argparse.Namespace) -> int:
         epub.metadata.language = "und"
 
     validate_epub(epub)
+    _log.info("EPUB version %s detected", epub.epub_version)
 
     # US-012: warn about ruby annotations
     ruby_count = count_ruby(epub)

@@ -26,6 +26,7 @@ import subprocess
 import pytest
 
 from epub_deepl.cli import main as cli_main
+from tests.fixtures.minimal import build_minimal_epub
 
 _EPUBCHECK = shutil.which("epubcheck")
 _MSG_PATTERN = re.compile(r"(?P<f>\d+) fatals?\s*/\s*(?P<e>\d+) errors?\s*/\s*(?P<w>\d+) warnings?")
@@ -85,6 +86,58 @@ def test_roundtrip_zero_epubcheck_drift_synthetic(
     """
     in_counts = _epubcheck_counts(synth_epub_file)
     out_path = _roundtrip_without_translation(synth_epub_file, tmp_path)
+    out_counts = _epubcheck_counts(out_path)
+    assert in_counts == out_counts, f"epubcheck drift: IN={in_counts} OUT={out_counts}"
+
+
+@pytest.mark.skipif(_EPUBCHECK is None, reason="epubcheck not installed")
+@pytest.mark.integration
+def test_roundtrip_zero_epubcheck_drift_synthetic_epub3(
+    synth_epub3_file: pathlib.Path,
+    tmp_path: pathlib.Path,
+) -> None:
+    """Round-trip on a synthetic EPUB 3 (NCX + non-spine nav doc) introduces
+    zero new epubcheck-reported issues — the EPUB 3 counterpart of
+    test_roundtrip_zero_epubcheck_drift_synthetic.
+    """
+    in_counts = _epubcheck_counts(synth_epub3_file)
+    out_path = _roundtrip_without_translation(synth_epub3_file, tmp_path)
+    out_counts = _epubcheck_counts(out_path)
+    assert in_counts == out_counts, f"epubcheck drift: IN={in_counts} OUT={out_counts}"
+
+
+@pytest.mark.skipif(_EPUBCHECK is None, reason="epubcheck not installed")
+@pytest.mark.integration
+def test_roundtrip_zero_epubcheck_drift_synthetic_epub3_landmarks_page_list(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Round-trip on a synthetic EPUB 3 with both NCX and a nav doc carrying
+    landmarks + page-list navs (US-008's translate="no" exclusion) introduces
+    zero new epubcheck-reported issues.
+    """
+    epub_path = tmp_path / "epub3_landmarks_pagelist.epub"
+    epub_path.write_bytes(
+        build_minimal_epub(epub_version="3.0", nav_landmarks=True, nav_page_list=True)
+    )
+    in_counts = _epubcheck_counts(epub_path)
+    out_path = _roundtrip_without_translation(epub_path, tmp_path)
+    out_counts = _epubcheck_counts(out_path)
+    assert in_counts == out_counts, f"epubcheck drift: IN={in_counts} OUT={out_counts}"
+
+
+@pytest.mark.skipif(_EPUBCHECK is None, reason="epubcheck not installed")
+@pytest.mark.integration
+def test_roundtrip_zero_epubcheck_drift_synthetic_epub3_nav_only(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Round-trip on a synthetic EPUB 3 with a nav doc only, no NCX (FR-4 nav
+    matrix: EPUB 3.x requires the nav doc, NCX is optional), introduces zero
+    new epubcheck-reported issues.
+    """
+    epub_path = tmp_path / "epub3_nav_only.epub"
+    epub_path.write_bytes(build_minimal_epub(epub_version="3.0", include_ncx=False))
+    in_counts = _epubcheck_counts(epub_path)
+    out_path = _roundtrip_without_translation(epub_path, tmp_path)
     out_counts = _epubcheck_counts(out_path)
     assert in_counts == out_counts, f"epubcheck drift: IN={in_counts} OUT={out_counts}"
 

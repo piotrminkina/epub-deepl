@@ -15,9 +15,10 @@ from lxml import etree
 from epub_deepl.epub import opf as opf_module
 from epub_deepl.epub._safe_parser import parse_xml
 from epub_deepl.epub.model import Epub, XhtmlFile
+from epub_deepl.epub.nav import parse_nav_doc
 from epub_deepl.epub.ncx import parse_ncx
 from epub_deepl.epub.xhtml import extract_body_html
-from epub_deepl.errors import DrmDetected, MissingNcx, NotAnEpub
+from epub_deepl.errors import DrmDetected, MissingNavDoc, MissingNcx, NotAnEpub
 
 # Max uncompressed EPUB size (500 MB) — zip-bomb guard (tech-spec §10)
 _MAX_EPUB_SIZE_BYTES = 500 * 1024 * 1024
@@ -84,8 +85,8 @@ def _read_from_zipfile(zf: zipfile.ZipFile) -> Epub:
     opf_raw = zf.read(opf_path)
     opf_dir = posixpath.dirname(opf_path)
 
-    # Validate EPUB version
-    _validate_epub_version(opf_raw)
+    # Validate and record EPUB version
+    epub_version, major_version = _parse_epub_version(opf_raw)
 
     # Parse OPF sections
     metadata = opf_module.parse_metadata(opf_raw)
@@ -113,6 +114,29 @@ def _read_from_zipfile(zf: zipfile.ZipFile) -> Epub:
         else:
             raise MissingNcx(f"NCX file referenced in manifest not found in ZIP: {ncx_zip_path!r}")
 
+    # Locate EPUB 3 nav document — gated on major_version so EPUB 2 parsing
+    # stays byte-identical to before this feature existed.
+    nav_doc = None
+    nav_zip_path: str | None = None
+    if major_version >= 3:
+        nav_item_id = None
+        nav_item = None
+        for item_id, manifest_item in manifest.items():
+            if "nav" in (manifest_item.properties or "").split():
+                nav_item_id = item_id
+                nav_item = manifest_item
+                break
+
+        if nav_item is not None:
+            nav_zip_path = _join_opf(opf_dir, nav_item.href)
+            if nav_zip_path not in names:
+                raise MissingNavDoc(
+                    f"Nav document referenced in manifest not found in ZIP: {nav_zip_path!r}"
+                )
+            nav_bytes = zf.read(nav_zip_path)
+            nav_in_spine = any(spine_ref.idref == nav_item_id for spine_ref in spine.items)
+            nav_doc = parse_nav_doc(nav_bytes, nav_item.href, nav_zip_path, nav_in_spine)
+
     # Read all XHTML spine files
     xhtmls: dict[str, XhtmlFile] = {}
     for spine_ref in spine.items:
@@ -138,6 +162,8 @@ def _read_from_zipfile(zf: zipfile.ZipFile) -> Epub:
     }
     if ncx_item is not None:
         skip_paths.add(_join_opf(opf_dir, ncx_item.href))
+    if nav_zip_path is not None:
+        skip_paths.add(nav_zip_path)
     for href in xhtmls:
         skip_paths.add(_join_opf(opf_dir, href))
 
@@ -157,11 +183,18 @@ def _read_from_zipfile(zf: zipfile.ZipFile) -> Epub:
         other_files=other_files,
         opf_raw_xml=opf_raw,
         container_xml_bytes=container_bytes,
+        nav_doc=nav_doc,
+        epub_version=epub_version,
+        major_version=major_version,
     )
 
 
-def _validate_epub_version(opf_bytes: bytes) -> None:
-    """Raise NotAnEpub if OPF root is not a <package> with version 2.x."""
+def _parse_epub_version(opf_bytes: bytes) -> tuple[str, int]:
+    """Return (version, major_version) after validating the OPF <package> element.
+
+    Raises:
+        NotAnEpub: root is not <package>, or version is not 2.x/3.x.
+    """
     try:
         root = parse_xml(opf_bytes)
     except etree.XMLSyntaxError as exc:
@@ -172,8 +205,10 @@ def _validate_epub_version(opf_bytes: bytes) -> None:
         raise NotAnEpub(f"OPF root element is <{local_tag}>, expected <package>")
 
     version = root.get("version", "")
-    if not version.startswith("2"):
-        raise NotAnEpub(f"Unsupported EPUB version {version!r} (only 2.x is supported)")
+    if not version.startswith(("2", "3")):
+        raise NotAnEpub(f"Unsupported EPUB version {version!r} (only 2.x/3.x supported)")
+
+    return version, int(version[0])
 
 
 def _join_opf(opf_dir: str, href: str) -> str:

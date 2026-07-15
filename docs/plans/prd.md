@@ -29,8 +29,9 @@ Two subcommands of a single binary:
   the translated EPUB, reusing the original EPUB as a structural template.
 
 The MVP targets EPUB 2.0.1 books with NCX-based navigation (the format
-the maintainer's corpus is in). EPUB 3 with `nav.xhtml` is out of MVP
-scope.
+the maintainer's corpus is in), and now extends to reflowable EPUB 3.x
+books with nav-document navigation (NCX optional). Fixed-layout EPUB,
+SVG-in-spine content, and media overlays remain out of MVP scope.
 
 ---
 
@@ -156,13 +157,18 @@ Before producing any output, `prepare` must validate:
 - ZIP contains `mimetype` and `META-INF/container.xml`.
 - `mimetype` content is exactly `application/epub+zip`.
 - `META-INF/container.xml` references a valid OPF path.
-- The OPF is parseable XML with a `<package>` root and EPUB 2.0 version.
+- The OPF is parseable XML with a `<package>` root and a `version`
+  attribute starting with `2` or `3` (EPUB 2.x or 3.x).
 - OPF `<manifest>` is parseable; every `<item href="…">` resolves to a
   file in the ZIP.
 - OPF `<spine>` is parseable; every `<itemref idref="…">` resolves to a
   manifest item.
-- NCX file (referenced as `toc` in the spine or as `application/x-dtbncx+xml`
-  in the manifest) exists and is parseable.
+- Navigation document requirement depends on EPUB version:
+  - EPUB 2.x: NCX file (referenced as `toc` in the spine or as
+    `application/x-dtbncx+xml` in the manifest) exists and is parseable.
+  - EPUB 3.x: a manifest `<item>` whose `properties` token list contains
+    `nav` exists and is parseable; NCX is optional and, when present, is
+    kept in sync with the nav document.
 - No `META-INF/encryption.xml` (DRM detection).
 
 `restore` must additionally validate:
@@ -186,6 +192,8 @@ Before producing any output, `prepare` must validate:
 ### In scope (MVP)
 
 - EPUB 2.0.1 with NCX-based navigation.
+- Reflowable EPUB 3.x with nav-document navigation (NCX optional; both
+  kept in sync when present).
 - Round-trip preservation of all human-visible content and OPF/NCX
   structural metadata required by e-readers.
 - DeepL HTML document compatibility (output is HTML5 that DeepL accepts
@@ -194,7 +202,8 @@ Before producing any output, `prepare` must validate:
 
 ### Out of scope
 
-- EPUB 3 with `nav.xhtml` navigation — deferred to post-MVP.
+- Fixed-layout EPUB, SVG-in-spine spine items, and EPUB media overlays
+  — rejected regardless of EPUB version.
 - DRM-protected EPUBs — detected and rejected, never supported.
 - Automatic invocation of the DeepL API (user uploads/downloads manually).
 - Automatic invocation of `epubcheck` (manual user step).

@@ -10,6 +10,7 @@ Restore flow (tech-spec §5):
 from __future__ import annotations
 
 from epub_deepl.epub.model import Epub, NavPoint
+from epub_deepl.epub.nav import rebuild_nav_doc_bytes, resolve_nav_labels
 from epub_deepl.epub.ncx import resolve_label
 from epub_deepl.epub.validator import validate_translated_html
 from epub_deepl.epub.writer import write_epub, write_epub_bytes
@@ -28,7 +29,7 @@ def apply_and_write(
     output_path: str,
 ) -> None:
     """Apply translated content and write the output EPUB to output_path."""
-    updated_xhtml, ncx_labels, doc_title = _apply(epub, doc, target_language)
+    updated_xhtml, ncx_labels, doc_title, new_nav_doc_bytes = _apply(epub, doc, target_language)
     write_epub(
         epub=epub,
         output_path=output_path,
@@ -39,6 +40,7 @@ def apply_and_write(
         target_language=target_language,
         new_ncx_labels=ncx_labels,
         new_doc_title=doc_title,
+        new_nav_doc_bytes=new_nav_doc_bytes,
     )
 
 
@@ -48,7 +50,7 @@ def apply_and_write_bytes(
     target_language: str,
 ) -> bytes:
     """Apply translated content and return the output EPUB as bytes (for testing)."""
-    updated_xhtml, ncx_labels, doc_title = _apply(epub, doc, target_language)
+    updated_xhtml, ncx_labels, doc_title, new_nav_doc_bytes = _apply(epub, doc, target_language)
     return write_epub_bytes(
         epub=epub,
         updated_xhtml_bytes=updated_xhtml,
@@ -58,6 +60,7 @@ def apply_and_write_bytes(
         target_language=target_language,
         new_ncx_labels=ncx_labels,
         new_doc_title=doc_title,
+        new_nav_doc_bytes=new_nav_doc_bytes,
     )
 
 
@@ -65,13 +68,16 @@ def _apply(
     epub: Epub,
     doc: TranslatedDoc,
     target_language: str,
-) -> tuple[dict[str, bytes], dict[str, str], str]:
+) -> tuple[dict[str, bytes], dict[str, str], str, bytes | None]:
     """Core application logic.
 
     Returns:
         updated_xhtml: href → updated bytes
         ncx_labels: nav_id → resolved label text
         doc_title: new docTitle string for NCX
+        new_nav_doc_bytes: rebuilt EPUB 3 nav document bytes, for a
+            *non-spine* nav doc only; None if there is no nav doc, or it is
+            in-spine (its bytes are already folded into updated_xhtml then).
     """
     # Validate sections match spine
     validate_translated_html(epub, doc.sections)
@@ -79,9 +85,18 @@ def _apply(
     # Validate metadata field counts match (tech-spec §5.3)
     _validate_metadata_counts(epub, doc)
 
+    # The nav doc's own translated body (in-spine or not) is withheld from
+    # the generic spine loop below — unlike a plain chapter, its toc labels
+    # need the hybrid anchor-resolution overwrite (resolve_nav_labels +
+    # rebuild_nav_doc_bytes), not a bare replace_body_content swap.
+    sections = dict(doc.sections)
+    nav_doc_translated_body: str | None = None
+    if epub.nav_doc is not None:
+        nav_doc_translated_body = sections.pop(epub.nav_doc.href, None)
+
     # 1. Build updated XHTML bytes (replace body content)
     updated_xhtml: dict[str, bytes] = {}
-    for href, translated_body in doc.sections.items():
+    for href, translated_body in sections.items():
         xhtml_file = epub.xhtmls.get(href)
         if xhtml_file is None:
             raise TranslatedHtmlMismatch(f"Section href not in epub.xhtmls: {href!r}")
@@ -108,7 +123,21 @@ def _apply(
             out=ncx_labels,
         )
 
-    return updated_xhtml, ncx_labels, doc_title
+    # 3. Rebuild the EPUB 3 nav document — toc labels resolved the same way
+    # as NCX, against the now-translated spine XHTML files from step 1.
+    new_nav_doc_bytes: bytes | None = None
+    if epub.nav_doc is not None and nav_doc_translated_body is not None:
+        nav_labels = resolve_nav_labels(epub.nav_doc, epub)
+        rebuilt_nav_bytes = rebuild_nav_doc_bytes(epub.nav_doc, nav_doc_translated_body, nav_labels)
+        if epub.nav_doc.in_spine:
+            updated_xhtml[epub.nav_doc.href] = rebuilt_nav_bytes
+            nav_xhtml_file = epub.xhtmls.get(epub.nav_doc.href)
+            if nav_xhtml_file is not None:
+                nav_xhtml_file.raw_bytes = rebuilt_nav_bytes
+        else:
+            new_nav_doc_bytes = rebuilt_nav_bytes
+
+    return updated_xhtml, ncx_labels, doc_title, new_nav_doc_bytes
 
 
 def _validate_metadata_counts(epub: Epub, doc: TranslatedDoc) -> None:

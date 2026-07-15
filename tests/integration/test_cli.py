@@ -168,6 +168,27 @@ def test_restore_exit_code_1_on_translated_html_mismatch(
 
 
 @pytest.mark.integration
+def test_restore_epub3_exit_code_1_on_missing_nav_section(
+    synth_epub3_file: pathlib.Path, tmp_path: pathlib.Path
+) -> None:
+    """restore exits 1 for an EPUB 3 book when the translated HTML is missing
+    the nav document's own data-source-href section — the CLI-level
+    counterpart of test_epub3_missing_nav_section_raises_mismatch.
+    """
+    html_out = tmp_path / "prepared3.html"
+    rc, _ = _run_cli(["prepare", str(synth_epub3_file), "--output", str(html_out)])
+    assert rc == 0
+    prepared = html_out.read_text(encoding="utf-8")
+    assert 'data-source-href="nav.xhtml"' in prepared
+
+    bad_html = tmp_path / "bad3.html"
+    bad_html.write_text(prepared.replace('data-source-href="nav.xhtml"', ""), encoding="utf-8")
+    rc, stderr = _run_cli(["restore", str(synth_epub3_file), str(bad_html), "--lang", "pl"])
+    assert rc == 1
+    assert "[ERROR]" in stderr
+
+
+@pytest.mark.integration
 def test_default_output_naming_prepare(
     synth_epub_file: pathlib.Path,
 ) -> None:

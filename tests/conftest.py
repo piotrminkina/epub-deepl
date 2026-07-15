@@ -76,6 +76,20 @@ def synth_epub_file(tmp_path: pathlib.Path, synth_epub_bytes: bytes) -> pathlib.
 
 
 @pytest.fixture
+def synth_epub3_bytes() -> bytes:
+    """A minimal 3-chapter synthetic EPUB 3 (NCX + non-spine nav doc) as bytes."""
+    return build_minimal_epub(epub_version="3.0")
+
+
+@pytest.fixture
+def synth_epub3_file(tmp_path: pathlib.Path, synth_epub3_bytes: bytes) -> pathlib.Path:
+    """Write the synthetic EPUB 3 to a temp file and return its path."""
+    p = tmp_path / "test3.epub"
+    p.write_bytes(synth_epub3_bytes)
+    return p
+
+
+@pytest.fixture
 def tmp_epub(tmp_path: pathlib.Path) -> pathlib.Path:
     """An empty temp path suitable for write tests."""
     return tmp_path / "output.epub"

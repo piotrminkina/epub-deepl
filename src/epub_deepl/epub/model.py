@@ -15,7 +15,7 @@ class ManifestItem:
     item_id: str  # OPF <item id="...">
     href: str  # OPF <item href="..."> relative to OPF directory
     media_type: str  # e.g. application/xhtml+xml
-    properties: str | None = None  # EPUB 3 only; preserved but unused in MVP
+    properties: str | None = None  # EPUB 3 only; space-separated tokens, e.g. "nav scripted"
 
 
 @dataclass
@@ -81,6 +81,28 @@ class Ncx:
 
 
 @dataclass
+class NavDocEntry:
+    """One <li> in the EPUB 3 nav doc's toc <ol> (recursive)."""
+
+    entry_id: str  # synthetic deterministic id, e.g. "navdoc-toc-1" (1-based pre-order)
+    label: str
+    href: str  # raw href attribute as written in the nav doc; "" if missing
+    children: list[NavDocEntry] = field(default_factory=list)
+
+
+@dataclass
+class NavDoc:
+    """Parsed EPUB 3 navigation document (nav.xhtml)."""
+
+    href: str  # OPF-relative href (manifest key space)
+    href_in_zip: str  # full ZIP path
+    raw_bytes: bytes  # original bytes — restoration template
+    toc_entries: list[NavDocEntry]
+    has_toc_nav: bool
+    in_spine: bool = False
+
+
+@dataclass
 class XhtmlFile:
     """One XHTML content file from the OPF spine."""
 
@@ -91,7 +113,7 @@ class XhtmlFile:
 
 @dataclass
 class Epub:
-    """Complete in-memory representation of a parsed EPUB 2.0 archive."""
+    """Complete in-memory representation of a parsed EPUB 2.x/3.x archive."""
 
     opf_path: str  # full ZIP path, e.g. "OEBPS/content.opf"
     opf_dir: str  # dirname of opf_path, e.g. "OEBPS"
@@ -104,3 +126,6 @@ class Epub:
     # Preserve original bytes of key structural files for restoration
     opf_raw_xml: bytes  # original OPF bytes (template for writer)
     container_xml_bytes: bytes  # META-INF/container.xml verbatim
+    nav_doc: NavDoc | None = None  # EPUB 3 navigation document, if any
+    epub_version: str = "2.0"  # raw <package version="..."> string
+    major_version: int = 2  # 2 or 3, derived from epub_version

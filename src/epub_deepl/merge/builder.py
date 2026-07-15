@@ -13,6 +13,7 @@ import html
 
 from epub_deepl.epub._safe_parser import parse_xml_recover
 from epub_deepl.epub.model import Epub, NavPoint
+from epub_deepl.epub.nav import extract_nav_body_html
 from epub_deepl.epub.xhtml import count_ruby_elements
 from epub_deepl.logging_setup import get_logger
 
@@ -67,6 +68,22 @@ def build(epub: Epub) -> str:
         parts.append("</ol>\n")
         parts.append("</nav>\n")
 
+    # EPUB 3 nav document — non-spine only. An in-spine nav doc is annotated
+    # in place inside the spine loop below instead (it already gets a
+    # <section data-source-href="…" data-spine-idx="…"> there); emitting it
+    # here too would send it to DeepL twice.
+    if epub.nav_doc is not None and not epub.nav_doc.in_spine:
+        nav_title = _extract_xhtml_title(epub.nav_doc.raw_bytes)
+        parts.append(
+            f'<section data-source-href="{html.escape(epub.nav_doc.href)}" data-nav-doc="true">\n'
+        )
+        parts.append('<header data-section-meta="true">\n')
+        if nav_title:
+            parts.append(f'<h1 data-xhtml-title="true">{html.escape(nav_title)}</h1>\n')
+        parts.append("</header>\n")
+        parts.append(extract_nav_body_html(epub.nav_doc.raw_bytes))
+        parts.append("\n</section>\n")
+
     # XHTML spine sections
     for idx, spine_ref in enumerate(epub.spine.items):
         item = epub.manifest.get(spine_ref.idref)
@@ -80,12 +97,29 @@ def build(epub: Epub) -> str:
         # Extract per-file title for translator context
         xhtml_title = _extract_xhtml_title(xhtml_file.raw_bytes)
 
-        parts.append(f'<section data-source-href="{html.escape(href)}" data-spine-idx="{idx}">\n')
+        # An in-spine nav doc gets the same data-nav-doc marker and page-list
+        # translate="no" treatment as its non-spine counterpart above, but
+        # stays inline in spine order instead of a separate section — it is
+        # restored via the same generic spine mechanism as any other chapter.
+        is_in_spine_nav_doc = (
+            epub.nav_doc is not None and epub.nav_doc.in_spine and epub.nav_doc.href == href
+        )
+        nav_doc_attr = ' data-nav-doc="true"' if is_in_spine_nav_doc else ""
+        section_body = (
+            extract_nav_body_html(xhtml_file.raw_bytes)
+            if is_in_spine_nav_doc
+            else xhtml_file.body_html
+        )
+
+        parts.append(
+            f'<section data-source-href="{html.escape(href)}" '
+            f'data-spine-idx="{idx}"{nav_doc_attr}>\n'
+        )
         parts.append('<header data-section-meta="true">\n')
         if xhtml_title:
             parts.append(f'<h1 data-xhtml-title="true">{html.escape(xhtml_title)}</h1>\n')
         parts.append("</header>\n")
-        parts.append(xhtml_file.body_html)
+        parts.append(section_body)
         parts.append("\n</section>\n")
 
     parts.append("</body>\n")

@@ -16,8 +16,9 @@ body:
       label: Problem
       description: What workflow does the missing feature block?
       placeholder: |
-        I want to translate EPUB 3 books with a `nav.xhtml` table of contents.
-        Currently the tool rejects them at the validator step.
+        I want to translate a fixed-layout EPUB with media overlays
+        (synchronized narration audio). Currently the tool rejects it
+        at the validator step.
     validations:
       required: true
 

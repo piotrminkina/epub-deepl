@@ -471,6 +471,234 @@ def test_simulated_translation_completeness() -> None:
 
 
 # ---------------------------------------------------------------------------
+# EPUB 3 nav-document tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+def test_roundtrip_epub3_both_navs_synth() -> None:
+    """EPUB 3 with both NCX and a non-spine nav doc round-trips cleanly and
+    keeps both navigation files in the output ZIP.
+    """
+    epub_bytes = build_minimal_epub(epub_version="3.0")
+    output = _roundtrip(epub_bytes)
+    _check_zip_invariants(output)
+    with zipfile.ZipFile(io.BytesIO(output)) as zf:
+        names = zf.namelist()
+    assert "OEBPS/nav.xhtml" in names
+    assert names.count("OEBPS/nav.xhtml") == 1
+    assert "OEBPS/toc.ncx" in names
+
+
+@pytest.mark.integration
+def test_roundtrip_epub3_nav_only_synth() -> None:
+    """EPUB 3 with a nav doc only, no NCX, round-trips cleanly (FR-4 nav
+    matrix: EPUB 3.x requires the nav doc, NCX is optional).
+    """
+    epub_bytes = build_minimal_epub(epub_version="3.0", include_ncx=False)
+    output = _roundtrip(epub_bytes)
+    _check_zip_invariants(output)
+    with zipfile.ZipFile(io.BytesIO(output)) as zf:
+        names = zf.namelist()
+    assert "OEBPS/nav.xhtml" in names
+    assert names.count("OEBPS/nav.xhtml") == 1
+    assert "OEBPS/toc.ncx" not in names
+
+
+@pytest.mark.integration
+def test_roundtrip_epub3_nav_in_spine_synth() -> None:
+    """EPUB 3 with the nav doc also referenced as a spine item round-trips
+    cleanly. Its final bytes travel through the ordinary spine-writing path
+    in writer.py, not the non-spine step 4b fallback.
+    """
+    epub_bytes = build_minimal_epub(epub_version="3.0", nav_in_spine=True)
+    output = _roundtrip(epub_bytes)
+    _check_zip_invariants(output)
+    with zipfile.ZipFile(io.BytesIO(output)) as zf:
+        names = zf.namelist()
+    assert "OEBPS/nav.xhtml" in names
+    assert names.count("OEBPS/nav.xhtml") == 1
+
+
+@pytest.mark.integration
+def test_epub3_nav_labels_consistent_with_ncx_after_translation() -> None:
+    """EPUB 3: nav-doc toc labels and NCX navLabels resolve to the same
+    translated heading text after a simulated translation.
+
+    Both structures share the same nav_map source and the same anchor-
+    resolution machinery (epub.ncx.resolve_anchor_label), so a chapter's
+    NCX navLabel and its nav-doc toc entry label must end up identical.
+    """
+    from epub_deepl.epub.nav import parse_nav_doc
+    from epub_deepl.epub.ncx import parse_ncx
+    from epub_deepl.epub.reader import read_epub_bytes
+    from epub_deepl.merge.builder import build
+    from epub_deepl.restore.applier import apply_and_write_bytes
+    from epub_deepl.restore.parser import parse_translated_html_bytes
+
+    epub_bytes = build_minimal_epub(epub_version="3.0")
+    epub = read_epub_bytes(epub_bytes)
+    html = build(epub)
+    translated = _simulated_translation(html)
+    doc = parse_translated_html_bytes(translated.encode("utf-8"))
+    output = apply_and_write_bytes(epub, doc, "pl")
+    _check_zip_invariants(output)
+
+    with zipfile.ZipFile(io.BytesIO(output)) as zf:
+        ncx_bytes = zf.read("OEBPS/toc.ncx")
+        nav_bytes = zf.read("OEBPS/nav.xhtml")
+
+    ncx = parse_ncx(ncx_bytes, "OEBPS/toc.ncx")
+    nav_doc = parse_nav_doc(nav_bytes, "nav.xhtml", "OEBPS/nav.xhtml", in_spine=False)
+
+    assert len(ncx.nav_map) == len(nav_doc.toc_entries) == 3
+    for nav_point, toc_entry in zip(ncx.nav_map, nav_doc.toc_entries, strict=True):
+        assert nav_point.label == toc_entry.label, (
+            f"NCX label {nav_point.label!r} != nav-doc label {toc_entry.label!r}"
+        )
+        assert nav_point.label.startswith("«PL»"), f"Label not translated: {nav_point.label!r}"
+
+
+@pytest.mark.integration
+def test_epub3_nav_toc_entry_keeps_translated_label_when_anchor_unresolvable() -> None:
+    """A nav-doc toc entry whose target has neither the referenced fragment
+    nor any heading at all cannot be anchor-resolved (resolve_anchor_label
+    returns None); its label is left as DeepL's own (simulated) translation
+    of the original nav-doc link text, exactly like the NCX fallback in
+    resolve_label() when resolve_anchor_label fails there too.
+
+    Distinguishes the two label origins by content rather than merely by the
+    "«PL»" translation prefix (both are «PL»-prefixed under
+    _simulated_translation): entry 0's target has a resolvable heading, so
+    its label becomes the *heading's* translated text; entry 1's target has
+    no heading, so its label stays the *nav link's own* translated text —
+    a different string from any chapter heading.
+    """
+    from epub_deepl.epub.nav import parse_nav_doc
+    from epub_deepl.epub.reader import read_epub_bytes
+    from epub_deepl.merge.builder import build
+    from epub_deepl.restore.applier import apply_and_write_bytes
+    from epub_deepl.restore.parser import parse_translated_html_bytes
+
+    xhtmls = [
+        XhtmlSpec(
+            href="ch01.xhtml",
+            title="Chapter 1",
+            body_html='<h1 id="ch1-heading">Chapter One Heading</h1><p>Chapter 1 content.</p>',
+        ),
+        XhtmlSpec(
+            href="ch02.xhtml",
+            title="Chapter 2",
+            body_html="<p>No heading here, just prose.</p>",
+        ),
+    ]
+    nav_map = [
+        NavPointSpec(
+            label="Chapter One", src="ch01.xhtml#ch1-heading", nav_id="navPoint-1", play_order=1
+        ),
+        NavPointSpec(
+            label="Chapter Two",
+            src="ch02.xhtml#missing-fragment",
+            nav_id="navPoint-2",
+            play_order=2,
+        ),
+    ]
+    epub_bytes = build_minimal_epub(epub_version="3.0", xhtmls=xhtmls, nav_map=nav_map)
+    epub = read_epub_bytes(epub_bytes)
+    html = build(epub)
+    translated = _simulated_translation(html)
+    doc = parse_translated_html_bytes(translated.encode("utf-8"))
+    output = apply_and_write_bytes(epub, doc, "pl")
+    _check_zip_invariants(output)
+
+    with zipfile.ZipFile(io.BytesIO(output)) as zf:
+        nav_bytes = zf.read("OEBPS/nav.xhtml")
+    nav_doc = parse_nav_doc(nav_bytes, "nav.xhtml", "OEBPS/nav.xhtml", in_spine=False)
+
+    assert len(nav_doc.toc_entries) == 2
+    resolved_entry, fallback_entry = nav_doc.toc_entries
+
+    # Resolved via the chapter's own heading (fragment found).
+    assert resolved_entry.label == "«PL» Chapter One Heading"
+    # Unresolvable (fragment missing, no heading at all): kept as the
+    # simulated-translated original nav link text, not overwritten.
+    assert fallback_entry.label == "«PL» Chapter Two"
+    assert fallback_entry.label != resolved_entry.label
+
+
+@pytest.mark.integration
+def test_epub3_payload_marks_nav_doc_and_page_list_no_translate() -> None:
+    """merge.builder marks the non-spine EPUB 3 nav doc section with
+    data-nav-doc="true" and excludes its page-list nav from translation via
+    translate="no" (US-008). A non-spine nav doc carries no data-spine-idx —
+    that attribute is reserved for sections backed by an actual spine entry.
+    """
+    import re
+
+    from epub_deepl.epub.reader import read_epub_bytes
+    from epub_deepl.merge.builder import build
+
+    epub_bytes = build_minimal_epub(epub_version="3.0", nav_page_list=True)
+    epub = read_epub_bytes(epub_bytes)
+    html = build(epub)
+
+    assert 'data-source-href="nav.xhtml"' in html
+    assert 'data-nav-doc="true"' in html
+    assert "page-list" in html
+    assert 'translate="no"' in html
+
+    match = re.search(r'<section[^>]*data-source-href="nav\.xhtml"[^>]*>', html)
+    assert match is not None
+    assert "data-spine-idx=" not in match.group(0)
+
+
+@pytest.mark.integration
+def test_epub3_in_spine_nav_doc_annotated_once_with_both_markers() -> None:
+    """An in-spine nav doc's <section> carries both data-spine-idx (ordinary
+    spine annotation) and data-nav-doc (discriminator marker) together, and
+    appears exactly once in the payload — never emitted twice as a separate
+    non-spine section too.
+    """
+    import re
+
+    from epub_deepl.epub.reader import read_epub_bytes
+    from epub_deepl.merge.builder import build
+
+    epub_bytes = build_minimal_epub(epub_version="3.0", nav_in_spine=True)
+    epub = read_epub_bytes(epub_bytes)
+    html = build(epub)
+
+    assert html.count('data-source-href="nav.xhtml"') == 1
+    match = re.search(r'<section[^>]*data-source-href="nav\.xhtml"[^>]*>', html)
+    assert match is not None
+    assert "data-spine-idx=" in match.group(0)
+    assert 'data-nav-doc="true"' in match.group(0)
+
+
+@pytest.mark.integration
+def test_epub3_missing_nav_section_raises_mismatch() -> None:
+    """SM-7 / C-4: stripping the nav doc's own data-source-href section
+    surfaces a precise TranslatedHtmlMismatch — the nav-doc counterpart of
+    test_adversarial_translation_strips_data_attribute_surfaces_precise_error.
+    """
+    from epub_deepl.epub.reader import read_epub_bytes
+    from epub_deepl.errors import TranslatedHtmlMismatch
+    from epub_deepl.merge.builder import build
+    from epub_deepl.restore.applier import apply_and_write_bytes
+    from epub_deepl.restore.parser import parse_translated_html_bytes
+
+    epub_bytes = build_minimal_epub(epub_version="3.0")
+    epub = read_epub_bytes(epub_bytes)
+    html = build(epub)
+
+    stripped = html.replace('data-source-href="nav.xhtml"', "")
+    doc = parse_translated_html_bytes(stripped.encode("utf-8"))
+
+    with pytest.raises(TranslatedHtmlMismatch):
+        apply_and_write_bytes(epub, doc, "pl")
+
+
+# ---------------------------------------------------------------------------
 # Corpus round-trip tests (skipped if corpus absent)
 # ---------------------------------------------------------------------------
 

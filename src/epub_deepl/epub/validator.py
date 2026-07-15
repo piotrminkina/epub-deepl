@@ -14,6 +14,7 @@ from epub_deepl.epub.model import Epub
 from epub_deepl.errors import (
     BrokenManifest,
     BrokenSpine,
+    MissingNavDoc,
     MissingNcx,
     NotAnEpub,
     OutputEqualsInput,
@@ -62,8 +63,12 @@ def validate_epub(epub: Epub) -> None:
     # Spine items are XHTML (US-020 / I-2)
     _check_spine_media_types(epub)
 
-    # NCX exists
-    if epub.ncx is None:
+    # Navigation document (FR-4 nav matrix): EPUB 3.x requires the nav doc
+    # (NCX optional); EPUB 2.x requires NCX, unchanged.
+    if epub.major_version >= 3:
+        if epub.nav_doc is None:
+            raise MissingNavDoc("No nav document found in EPUB (required for EPUB 3.x)")
+    elif epub.ncx is None:
         raise MissingNcx("No NCX found in EPUB (required for EPUB 2.0)")
 
 
@@ -84,12 +89,25 @@ def _check_manifest_files(epub: Epub) -> None:
         if epub.opf_dir and ncx_zip.startswith(epub.opf_dir + "/"):
             all_zip_paths.add(ncx_zip[len(epub.opf_dir) + 1 :])
 
+    # Also include the nav doc
+    if epub.nav_doc is not None:
+        nav_zip = epub.nav_doc.href_in_zip
+        if epub.opf_dir and nav_zip.startswith(epub.opf_dir + "/"):
+            all_zip_paths.add(nav_zip[len(epub.opf_dir) + 1 :])
+
     missing: list[str] = []
     for item in epub.manifest.values():
         href = item.href
         # Skip NCX items — their presence is validated separately by the
         # MissingNcx check, which gives a more precise error message.
         if item.media_type == "application/x-dtbncx+xml":
+            continue
+        # Skip the nav doc — its presence is validated separately by the
+        # MissingNavDoc check, which gives a more precise error message.
+        # Matched on the manifest item's own declared properties (mirrors the
+        # media_type-based NCX skip above), not on epub.nav_doc, so the check
+        # doesn't depend on the reader having actually populated nav_doc.
+        if "nav" in (item.properties or "").split():
             continue
         # Check both directly and via posixpath join
         if href not in all_zip_paths:
@@ -98,7 +116,8 @@ def _check_manifest_files(epub: Epub) -> None:
             found_in_other = full in epub.other_files
             found_in_xhtmls = href in epub.xhtmls
             found_in_ncx = epub.ncx is not None and epub.ncx.ncx_href_in_zip in (full, href)
-            if not (found_in_other or found_in_xhtmls or found_in_ncx):
+            found_in_nav = epub.nav_doc is not None and epub.nav_doc.href_in_zip in (full, href)
+            if not (found_in_other or found_in_xhtmls or found_in_ncx or found_in_nav):
                 missing.append(href)
 
     if missing:
@@ -156,16 +175,22 @@ def validate_translated_html(epub: Epub, sections: dict[str, str]) -> None:
     Raises:
         TranslatedHtmlMismatch on any mismatch.
     """
-    # All spine XHTML hrefs must have a matching section
+    # All spine XHTML hrefs must have a matching section, plus the nav doc's
+    # href when it is not itself a spine item (a non-spine nav doc gets its
+    # own payload section; an in-spine one is already covered by spine_hrefs).
     spine_hrefs = {
         epub.manifest[ref.idref].href for ref in epub.spine.items if ref.idref in epub.manifest
     }
-    missing = spine_hrefs - set(sections.keys())
+    expected_hrefs = set(spine_hrefs)
+    if epub.nav_doc is not None and not epub.nav_doc.in_spine:
+        expected_hrefs.add(epub.nav_doc.href)
+
+    missing = expected_hrefs - set(sections.keys())
     if missing:
         raise TranslatedHtmlMismatch(f"Missing sections in translated HTML: {sorted(missing)}")
 
     # No unknown sections
-    unknown = set(sections.keys()) - spine_hrefs
+    unknown = set(sections.keys()) - expected_hrefs
     if unknown:
         raise TranslatedHtmlMismatch(
             f"Unknown sections in translated HTML (not in spine): {sorted(unknown)}"

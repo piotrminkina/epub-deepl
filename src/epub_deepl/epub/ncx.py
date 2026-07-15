@@ -193,6 +193,118 @@ def _first_heading(tree: etree._Element) -> etree._Element | None:
     return None
 
 
+def resolve_anchor_label(
+    src: str,
+    base_href_in_zip: str,
+    opf_dir: str,
+    epub: Epub,
+) -> str | None:
+    """Resolve a content anchor (NCX navPoint or nav-doc <a>) to a label.
+
+    Shared by NCX label resolution (`resolve_label`) and the EPUB 3 nav
+    document resolver (`epub.nav.resolve_nav_labels`) — both structures
+    reference content the same way: a path, optionally with a "#fragment",
+    relative to the referencing file's own directory.
+
+    Path-normalization fix: resolution happens in *absolute* URL-path space
+    (base directory prefixed with "/") rather than relative space. This
+    matters when opf_dir is "" (OPF at ZIP root) and the NCX/nav doc lives in
+    a subdirectory — resolving in relative space made `urljoin` produce a
+    relative result that could never satisfy an absolute `opf_root` prefix
+    check, causing every such entry to spuriously raise as an "escape".
+    Working in absolute space and checking the joined result's leading "/"
+    is both necessary and sufficient: `urljoin` already collapses ".."
+    segments, and a genuine escape above the ZIP root is the one case where
+    it drops the leading "/" instead of resolving further upward.
+
+    Percent-decoding happens *before* `urljoin`, not after: `urljoin` only
+    collapses literal ".."/"." segments per RFC 3986 dot-segment removal —
+    a percent-encoded segment such as "%2e%2e" is opaque to it and rides
+    through unresolved, only becoming a real ".." once decoded. Decoding
+    afterward (the historical bug here) let an encoded ".." pass both the
+    ZIP-root and OPF-root escape checks below, then decode into a genuine
+    escape once nothing was left to catch it.
+
+    An empty path component (a bare "#fragment" or a fully empty src) is
+    resolved to `base_href_in_zip` itself, matching standard URL fragment
+    semantics ("this same document") rather than the document's containing
+    directory.
+
+    Args:
+        src: raw content src/href, e.g. "ch01.xhtml#heading-3"
+        base_href_in_zip: full ZIP path of the referencing NCX or nav
+            document, e.g. "OEBPS/toc.ncx"
+        opf_dir: OPF directory in ZIP, e.g. "OEBPS" (may be "")
+        epub: the full EPUB model (xhtmls keyed by OPF-relative href)
+
+    Returns:
+        Whitespace-normalised label text, or None if the fragment is absent
+        from the target XHTML and no heading fallback is available (or the
+        target could not be parsed) — callers fall back to their own label.
+
+    Raises:
+        InternalError: src resolves outside the ZIP root, or to a file that
+            is not a spine XHTML entry known to `epub.xhtmls`.
+    """
+    fragment: str | None
+    if "#" in src:
+        path_part, _, frag = src.partition("#")
+        fragment = frag or None
+    else:
+        path_part, fragment = src, None
+
+    if path_part:
+        base_dir = posixpath.dirname(base_href_in_zip)
+        base_dir_url = f"/{base_dir}/" if base_dir else "/"
+        joined = urljoin(base_dir_url, unquote(path_part))
+        if not joined.startswith("/"):
+            raise InternalError(f"Anchor src escapes ZIP root: {src!r}")
+        # Second, independent pass: collapse any "." / ".." segments left
+        # over from the join, and refuse to proceed if any ".." survives —
+        # defense in depth for the containment check below, which is a raw
+        # string-prefix test and must never see a path that could still
+        # traverse via a residual dot-segment.
+        normalized = posixpath.normpath(joined)
+        if any(segment == ".." for segment in normalized.split("/")):
+            raise InternalError(f"Anchor src escapes ZIP root: {src!r}")
+        target_zip_path = normalized.lstrip("/")
+    else:
+        target_zip_path = base_href_in_zip
+
+    opf_root = f"{opf_dir.rstrip('/')}/" if opf_dir else ""
+    if opf_root and not target_zip_path.startswith(opf_root):
+        raise InternalError(f"Anchor src escapes OPF root: {target_zip_path!r}")
+    target_href = target_zip_path[len(opf_root) :] if opf_root else target_zip_path
+
+    xhtml = epub.xhtmls.get(target_href)
+    if xhtml is None:
+        raise InternalError(f"Anchor points to non-manifest file: {target_href!r}")
+
+    # Parse the (already-updated) XHTML bytes
+    try:
+        tree = parse_html_document(xhtml.raw_bytes)
+    except Exception:
+        return None
+
+    if fragment:
+        nodes = tree.xpath(f"//*[@id={xpath_literal(fragment)}]")
+        if not nodes:
+            # Fragment missing in translated XHTML — try heading fallback
+            heading = _first_heading(tree)
+            if heading is not None:
+                return normalize_whitespace(_text_content(heading))
+            return None
+        assert isinstance(nodes[0], etree._Element)
+        target_el: etree._Element = nodes[0]
+    else:
+        target_el_or_none = _first_heading(tree)
+        if target_el_or_none is None:
+            return None
+        target_el = target_el_or_none
+
+    return normalize_whitespace(_text_content(target_el))
+
+
 def resolve_label(
     nav_point: NavPoint,
     ncx_href_in_zip: str,
@@ -202,8 +314,8 @@ def resolve_label(
 ) -> str:
     """Compute the <navLabel> text for a navPoint from the translated XHTML.
 
-    C-3 fix: uses urllib.parse.urljoin + posixpath for URL-style resolution,
-    anchored at the NCX file's own directory, NOT the OPF directory.
+    Thin wrapper over `resolve_anchor_label`; falls back to the merged-HTML
+    translated label whenever anchor resolution can't produce a better one.
 
     Args:
         nav_point: the NavPoint whose label needs computing
@@ -215,55 +327,5 @@ def resolve_label(
     Returns:
         Whitespace-normalised text for the navLabel.
     """
-    src = nav_point.src
-    fragment: str | None
-    if "#" in src:
-        parts_split = src.split("#", 1)
-        path_part, fragment = parts_split[0], parts_split[1] or None
-    else:
-        path_part, fragment = src, None
-
-    # Resolve relative to NCX file's own directory (C-3 fix)
-    ncx_dir_url = posixpath.dirname(ncx_href_in_zip) + "/"
-    target_zip_path = unquote(urljoin(ncx_dir_url, path_part))
-
-    # Security: reject paths escaping the OPF root
-    opf_root = opf_dir.rstrip("/") + "/"
-    if not target_zip_path.startswith(opf_root) and target_zip_path != opf_dir:
-        raise InternalError(f"NCX src escapes OPF root: {target_zip_path!r}")
-
-    # Re-express relative to OPF directory for xhtmls map lookup.
-    # When opf_dir is "" (OPF at ZIP root) use "/" as the posixpath base so
-    # that relpath("/titlepage.xhtml", "/") == "titlepage.xhtml" instead of
-    # posixpath.relpath("/titlepage.xhtml", "") which uses cwd as the base and
-    # produces a relative path full of "../" components.
-    relpath_base = opf_dir if opf_dir else "/"
-    target_href = posixpath.relpath(target_zip_path, relpath_base)
-
-    xhtml = epub.xhtmls.get(target_href)
-    if xhtml is None:
-        raise InternalError(f"NCX points to non-manifest file: {target_href!r}")
-
-    # Parse the (already-updated) XHTML bytes
-    try:
-        tree = parse_html_document(xhtml.raw_bytes)
-    except Exception:
-        return flat_labels.get(nav_point.nav_id, nav_point.label)
-
-    if fragment:
-        nodes = tree.xpath(f"//*[@id={xpath_literal(fragment)}]")
-        if not nodes:
-            # Fragment missing in translated XHTML — try heading fallback
-            heading = _first_heading(tree)
-            if heading is not None:
-                return normalize_whitespace(_text_content(heading))
-            return flat_labels.get(nav_point.nav_id, nav_point.label)
-        assert isinstance(nodes[0], etree._Element)
-        target_el: etree._Element = nodes[0]
-    else:
-        target_el_or_none = _first_heading(tree)
-        if target_el_or_none is None:
-            return flat_labels.get(nav_point.nav_id, nav_point.label)
-        target_el = target_el_or_none
-
-    return normalize_whitespace(_text_content(target_el))
+    result = resolve_anchor_label(nav_point.src, ncx_href_in_zip, opf_dir, epub)
+    return result if result is not None else flat_labels.get(nav_point.nav_id, nav_point.label)

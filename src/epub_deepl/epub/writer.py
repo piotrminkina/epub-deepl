@@ -31,10 +31,16 @@ def write_epub(
     target_language: str,
     new_ncx_labels: dict[str, str],  # nav_id → text
     new_doc_title: str,
+    new_nav_doc_bytes: bytes | None = None,
 ) -> None:
     """Write a fully assembled EPUB ZIP to output_path.
 
     All structural content not explicitly updated is preserved byte-for-byte.
+
+    `new_nav_doc_bytes` is the rebuilt EPUB 3 nav document (toc labels
+    overwritten via anchor resolution, mirroring NCX) for a *non-spine* nav
+    doc; an in-spine nav doc's final bytes travel through
+    `updated_xhtml_bytes` instead, like any other spine XHTML file.
     """
     new_metadata = OpfMetadata(
         titles=new_metadata_titles,
@@ -61,6 +67,7 @@ def write_epub(
         updated_xhtml_bytes=updated_xhtml_bytes,
         new_opf_bytes=new_opf_bytes,
         new_ncx_bytes=new_ncx_bytes,
+        new_nav_doc_bytes=new_nav_doc_bytes,
     )
 
 
@@ -73,6 +80,7 @@ def write_epub_bytes(
     target_language: str,
     new_ncx_labels: dict[str, str],
     new_doc_title: str,
+    new_nav_doc_bytes: bytes | None = None,
 ) -> bytes:
     """Like write_epub but returns bytes (for testing)."""
     new_metadata = OpfMetadata(
@@ -101,6 +109,7 @@ def write_epub_bytes(
         updated_xhtml_bytes=updated_xhtml_bytes,
         new_opf_bytes=new_opf_bytes,
         new_ncx_bytes=new_ncx_bytes,
+        new_nav_doc_bytes=new_nav_doc_bytes,
     )
     return buf.getvalue()
 
@@ -111,9 +120,12 @@ def _write_zip(
     updated_xhtml_bytes: dict[str, bytes],
     new_opf_bytes: bytes,
     new_ncx_bytes: bytes | None,
+    new_nav_doc_bytes: bytes | None = None,
 ) -> None:
     buf = io.BytesIO()
-    _write_zip_to_stream(epub, buf, updated_xhtml_bytes, new_opf_bytes, new_ncx_bytes)
+    _write_zip_to_stream(
+        epub, buf, updated_xhtml_bytes, new_opf_bytes, new_ncx_bytes, new_nav_doc_bytes
+    )
     pathlib.Path(output_path).write_bytes(buf.getvalue())
 
 
@@ -123,6 +135,7 @@ def _write_zip_to_stream(
     updated_xhtml_bytes: dict[str, bytes],
     new_opf_bytes: bytes,
     new_ncx_bytes: bytes | None,
+    new_nav_doc_bytes: bytes | None = None,
 ) -> None:
     """Write the complete EPUB ZIP to a stream.
 
@@ -131,6 +144,7 @@ def _write_zip_to_stream(
       2. META-INF/container.xml
       3. OPF
       4. NCX (if present)
+      4b. EPUB 3 nav document (if present and non-spine)
       5. All XHTML files (in spine order, then any non-spine XHTML)
       6. All other files (CSS, images, fonts, etc.)
     """
@@ -159,6 +173,20 @@ def _write_zip_to_stream(
 
         # 5. XHTML files in spine order first
         written_zip_paths: set[str] = set()
+
+        # 4b. EPUB 3 nav document — non-spine only. An in-spine nav doc is
+        # not written here: it is already a spine item, so it is written by
+        # the spine-order loop below via updated_xhtml_bytes (falling back
+        # to a self-lookup in epub.xhtmls, like any other chapter). Reader.py
+        # never populates epub.xhtmls for a non-spine nav doc, so without
+        # this step its bytes would otherwise be silently dropped.
+        if epub.nav_doc is not None and not epub.nav_doc.in_spine:
+            nav_content = (
+                new_nav_doc_bytes if new_nav_doc_bytes is not None else epub.nav_doc.raw_bytes
+            )
+            zf.writestr(_deflated_info(epub.nav_doc.href_in_zip), nav_content)
+            written_zip_paths.add(epub.nav_doc.href_in_zip)
+
         for spine_ref in epub.spine.items:
             item = epub.manifest.get(spine_ref.idref)
             if item is None:

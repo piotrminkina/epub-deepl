@@ -27,8 +27,10 @@ into a single upload/download cycle per book:
    charge once per file. An EPUB with 10–50 XHTMLs exhausts the
    monthly quota on one book; this tool spends one document per book.
 
-**Status:** working MVP, no versioned release cut yet. Targets EPUB 2.0
-with NCX-based navigation. EPUB 3 + `nav.xhtml` is out of scope for now.
+**Status:** working MVP, no versioned release cut yet. Supports EPUB 2.x
+with NCX-based navigation and reflowable EPUB 3.x with nav-document
+navigation (NCX optional). Fixed-layout EPUB, SVG-in-spine content, and
+media overlays are out of scope.
 
 ## Install
 
@@ -146,6 +148,13 @@ that fragment ID in the restored XHTML and uses its translated heading
 text — guaranteeing TOC ↔ chapter-heading consistency without translating
 the labels twice.
 
+For EPUB 3.x books, the navigation document's body travels through the
+same content pipeline as any spine file — its "Contents" heading,
+landmarks, and page-list all get translated — and afterwards its
+`epub:type="toc"` entry labels are overwritten by the same anchor
+resolution used for NCX, so both navigation documents stay TOC ↔
+heading-consistent when a book ships both.
+
 Detailed architecture and edge cases:
 [`docs/plans/tech-spec.md`](docs/plans/tech-spec.md).
 
@@ -154,16 +163,19 @@ Detailed architecture and edge cases:
 ### In scope (MVP)
 
 - EPUB 2.0.1 with NCX-based navigation
+- Reflowable EPUB 3.x with nav-document navigation (NCX optional; both
+  kept in sync when present)
 - Round-trip preservation of all human-visible content + OPF / NCX
   structural metadata required by e-readers
 - DeepL HTML document compatibility (HTML5 self-contained payload)
 - Solo-user CLI workflow with manual upload / download to DeepL
 - Pre-flight validation of the input EPUB (fail-fast on DRM, broken
-  manifest, broken spine, non-XHTML spine items, missing NCX)
+  manifest, broken spine, non-XHTML spine items, missing NCX/nav document)
 
 ### Out of scope
 
-- EPUB 3 with `nav.xhtml` navigation (deferred — post-MVP)
+- Fixed-layout EPUB, SVG-in-spine spine items, and EPUB media overlays
+  (rejected regardless of EPUB version)
 - DRM-protected EPUBs (detected and rejected; never supported)
 - Automated DeepL API integration (user uploads manually)
 - Automated `epubcheck` invocation (manual user step)
@@ -193,7 +205,12 @@ architecture decisions in [`docs/adr/`](docs/adr/).
 
 Known limitations:
 
-- EPUB 3 + `nav.xhtml` support — deferred to post-MVP
+- Navigation document `<head><title>` stays untranslated — consistent
+  with all spine files
+- `package/@xml:lang` deliberately stays in the source language
+- Where a navigation label's anchor doesn't resolve, the NCX and
+  nav-document fallback labels are two independent DeepL translations of
+  the same string and may differ slightly
 - Apple Books / Calibre-specific metadata quirks — observed but not
   specially handled
 - Books exceeding DeepL's per-document character limit (~1 MB+) — no

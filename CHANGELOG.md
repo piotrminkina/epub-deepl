@@ -24,9 +24,30 @@ tagged.
   each XHTML body, mutates OPF `<dc:title>` / `<dc:description>` /
   `<dc:subject>` / `<dc:language>`, and rebuilds NCX `<navLabel>` text
   via anchor resolution against restored chapter headings.
+- **EPUB 3 nav-document (`nav.xhtml`) support.** `prepare` sends the
+  navigation document's toc body into the translation payload
+  alongside spine chapters, marked with `data-nav-doc="true"`
+  (`data-source-href` remains the restore key, unaffected by the new
+  marker); its `page-list` nav is excluded from translation via
+  `translate="no"`, matching the existing MathML treatment. That
+  `translate="no"` marker is payload-only: `restore` strips it back off
+  each page-list `<nav>` unless the original document already carried
+  one itself, in which case the original's exact value is restored
+  instead — the injected marker never leaks into the final EPUB.
+  `restore` rebuilds the nav doc afterwards, overwriting
+  `<nav epub:type="toc">`
+  link text via the same anchor-resolution strategy already used for
+  NCX `<navLabel>`, so both navigation structures land on the same
+  translated heading text. Per FR-4, EPUB 3.x requires the nav doc and
+  treats NCX as optional (EPUB 2.0's NCX requirement is unchanged); an
+  in-spine nav doc is restored through the ordinary spine path, a
+  non-spine one through a new writer step placed right after NCX in
+  ZIP-entry order.
 - **Input validator** (FR-4): fail-fast on DRM, broken manifest,
-  broken spine, non-XHTML spine items, missing NCX, input==output
-  path collision, output exists without `--force`.
+  broken spine, non-XHTML spine items, missing NCX (`MissingNcx`,
+  EPUB 2.0), missing nav document (`MissingNavDoc`, EPUB 3.x — the
+  nav doc is required regardless of whether NCX is also present),
+  input==output path collision, output exists without `--force`.
 - **ZIP packaging** per EPUB OCF 1.0: `mimetype` first entry, STORED,
   zero `flag_bits`, no extra fields, rest DEFLATED.
 - **Centralized lxml parser factory** (`epub/_safe_parser.py`) with
@@ -49,7 +70,10 @@ tagged.
 - **Automated `epubcheck` zero-drift tests** (`@pytest.mark.epubcheck`).
   Asserts that round-tripping any EPUB without translation produces
   identical fatal/error/warning counts under W3C `epubcheck`. Promotes
-  SM-4 from a manual recipe to a regression gate.
+  SM-4 from a manual recipe to a regression gate. Covers EPUB 3
+  variants via `build_minimal_epub`'s `nav_landmarks`/`nav_page_list`
+  (both hidden navs present alongside the toc nav) and `include_ncx`
+  (nav-doc-only, no NCX) fixture parameters.
 - **Non-ASCII end-to-end policy test.** Synthetic EPUB with Polish,
   CJK, and Cyrillic content in metadata + headings + body; asserts
   byte-exact preservation through the full CLI pipeline. Closes the

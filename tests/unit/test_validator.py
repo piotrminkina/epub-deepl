@@ -12,6 +12,7 @@ from epub_deepl.errors import (
     BrokenManifest,
     BrokenSpine,
     DrmDetected,
+    MissingNavDoc,
     MissingNcx,
     NotAnEpub,
     OutputEqualsInput,
@@ -244,3 +245,83 @@ def test_check_output_not_input_raises_on_collision(tmp_path: pathlib.Path) -> N
     p = str(tmp_path / "book.epub")
     with pytest.raises(OutputEqualsInput, match="Output path equals input path"):
         check_output_not_input(p, p)
+
+
+@pytest.mark.unit
+def test_validate_accepts_minimal_epub3_with_nav_doc() -> None:
+    """A well-formed minimal EPUB 3 (nav doc present) should pass validation."""
+    from epub_deepl.epub.reader import read_epub_bytes
+    from epub_deepl.epub.validator import validate_epub
+
+    epub = read_epub_bytes(build_minimal_epub(epub_version="3.0"))
+    validate_epub(epub)  # Should not raise
+
+
+@pytest.mark.unit
+def test_validate_rejects_missing_nav_doc_for_epub3() -> None:
+    """EPUB 3.x without a nav document must raise MissingNavDoc."""
+    from epub_deepl.epub.reader import read_epub_bytes
+    from epub_deepl.epub.validator import validate_epub
+
+    epub = read_epub_bytes(build_minimal_epub(epub_version="3.0"))
+    epub.nav_doc = None
+    with pytest.raises(MissingNavDoc):
+        validate_epub(epub)
+
+
+@pytest.mark.unit
+def test_validate_epub3_ncx_optional_when_nav_doc_present() -> None:
+    """EPUB 3.x with a nav doc but no NCX must still pass (NCX is optional in 3.x)."""
+    from epub_deepl.epub.reader import read_epub_bytes
+    from epub_deepl.epub.validator import validate_epub
+
+    epub = read_epub_bytes(build_minimal_epub(epub_version="3.0", include_ncx=False))
+    assert epub.ncx is None
+    validate_epub(epub)  # Should not raise
+
+
+@pytest.mark.unit
+def test_validate_translated_html_requires_nav_doc_section_when_not_in_spine() -> None:
+    """A non-spine nav doc must have its own section in the translated HTML."""
+    from epub_deepl.epub.reader import read_epub_bytes
+    from epub_deepl.epub.validator import validate_translated_html
+
+    epub = read_epub_bytes(build_minimal_epub(epub_version="3.0", nav_in_spine=False))
+    sections = {"ch01.xhtml": "<p>t</p>", "ch02.xhtml": "<p>t</p>", "ch03.xhtml": "<p>t</p>"}
+    with pytest.raises(TranslatedHtmlMismatch, match="Missing sections") as exc_info:
+        validate_translated_html(epub, sections)
+    assert "nav.xhtml" in str(exc_info.value)
+
+
+@pytest.mark.unit
+def test_validate_translated_html_accepts_nav_doc_section_when_not_in_spine() -> None:
+    """A non-spine nav doc's section satisfies validation once present."""
+    from epub_deepl.epub.reader import read_epub_bytes
+    from epub_deepl.epub.validator import validate_translated_html
+
+    epub = read_epub_bytes(build_minimal_epub(epub_version="3.0", nav_in_spine=False))
+    sections = {
+        "ch01.xhtml": "<p>t</p>",
+        "ch02.xhtml": "<p>t</p>",
+        "ch03.xhtml": "<p>t</p>",
+        "nav.xhtml": "<p>t</p>",
+    }
+    validate_translated_html(epub, sections)  # Should not raise
+
+
+@pytest.mark.unit
+def test_validate_translated_html_nav_doc_in_spine_not_double_counted() -> None:
+    """An in-spine nav doc is already covered by the spine hrefs — one section
+    for it (not two) is required and sufficient.
+    """
+    from epub_deepl.epub.reader import read_epub_bytes
+    from epub_deepl.epub.validator import validate_translated_html
+
+    epub = read_epub_bytes(build_minimal_epub(epub_version="3.0", nav_in_spine=True))
+    sections = {
+        "ch01.xhtml": "<p>t</p>",
+        "ch02.xhtml": "<p>t</p>",
+        "ch03.xhtml": "<p>t</p>",
+        "nav.xhtml": "<p>t</p>",
+    }
+    validate_translated_html(epub, sections)  # Should not raise

@@ -34,8 +34,12 @@ class MissingNcx(ValidationError):
     """NCX file missing or unparseable."""
 
 
+class MissingNavDoc(ValidationError):
+    """EPUB 3 navigation document missing or unparseable."""
+
+
 class NotAnEpub(ValidationError):
-    """File is not a valid EPUB 2.0 archive."""
+    """File is not a valid EPUB 2.x/3.x archive."""
 
 
 class UnsupportedMediaType(ValidationError):
