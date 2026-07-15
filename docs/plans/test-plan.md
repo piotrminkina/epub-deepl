@@ -1,7 +1,8 @@
 # Test Plan — epub-deepl
 
-**Status:** Draft v1
-**Related:** `prd.md` (US-001…US-017, SM-1…SM-6), `tech-stack.md`, `tech-spec.md`
+**Status:** v1.1 (suite implemented)
+**Related:** [`prd.md`](prd.md) (US-001…US-022, SM-1…SM-7),
+[`tech-stack.md`](tech-stack.md), [`tech-spec.md`](tech-spec.md)
 
 ---
 
@@ -28,7 +29,7 @@ CI gate (`fail_under = 85`); 100% on `epub/validator.py` and `epub/writer.py`
 
 ```
                 ┌──────────────────────────┐
-                │   Manual: epubcheck      │   ← out-of-band, user-run
+                │   epubcheck (zero-drift) │   ← auto: CI synthetic + local corpus
                 ├──────────────────────────┤
                 │   Integration (corpus)   │   ← corpus books, slow
                 ├──────────────────────────┤
@@ -40,14 +41,20 @@ CI gate (`fail_under = 85`); 100% on `epub/validator.py` and `epub/writer.py`
                 └──────────────────────────┘
 ```
 
-| Layer | Test count target | Avg duration |
+Only validation of *real post-DeepL output* remains manual (§9); the
+`epubcheck` layer itself is automated (`@pytest.mark.epubcheck`, §7.4).
+
+| Layer | Test count (as implemented, 2026-07) | Avg duration |
 |---|---|---|
-| Unit | ~50 tests | < 5 s total |
-| Integration (synth) | ~25 tests | < 10 s total |
-| Integration (CLI) | ~15 tests | < 15 s total |
+| Unit | ~190 tests | < 5 s total |
+| Integration (synth round-trip) | ~35 tests | < 10 s total |
+| Integration (CLI) | ~40 tests | < 15 s total |
+| Integration (epubcheck) | 7 tests (6 synthetic + corpus-parametrized) | < 30 s total |
 | Integration (corpus) | scales with corpus size (~4 scenarios × each corpus book; 2 books bundled, more via `EPUB_DEEPL_CORPUS`) | < 60 s total |
 
-Total: ~105 tests, < 90 s wall-clock with `pytest-xdist`.
+Total: 311 collected across all markers; ~35 s wall-clock sequential in
+the devcontainer (the original plan targeted ~105 tests — the suite
+grew ~3× with EPUB 3 and auto-split coverage).
 
 ---
 
@@ -61,14 +68,17 @@ Total: ~105 tests, < 90 s wall-clock with `pytest-xdist`.
 
 ### Fixtures (`tests/conftest.py`)
 
-- `corpus_dir`: session-scoped `Path` to the corpus directory; skips integration
-  corpus tests if directory missing or contains no `.epub` files.
-- `corpus_epubs`: parametrized fixture yielding each `.epub` file in
+- `corpus_dir`: session-scoped `Path` to the corpus directory; corpus tests
+  skip if the directory is missing or contains no `.epub` files.
+- `corpus_epub`: parametrized fixture yielding each `.epub` file in the
   corpus, with a clear `id` (book filename) for test report readability.
-- `synth_epub_factory`: function-scoped factory that builds a minimal
-  in-memory EPUB 2.0 ZIP from declarative parameters
-  (`{xhtmls: [...], opf_metadata: {...}, ncx_navpoints: [...]}`).
+- `synth_epub_bytes` / `synth_epub_file` (and `synth_epub3_bytes` /
+  `synth_epub3_file`): the default EPUB 2 / EPUB 3 book as in-memory
+  bytes or an on-disk temp file.
 - `tmp_epub`: function-scoped temp file path for write tests.
+- The declarative factory itself (`build_minimal_epub`, `XhtmlSpec`,
+  `NavPointSpec`) is imported directly from `tests/fixtures/minimal.py`;
+  it is not wrapped in a fixture.
 
 ### Synthetic fixture builder
 
@@ -114,6 +124,10 @@ chapter body.
 - `@pytest.mark.corpus` — uses the corpus directory; runnable only when corpus is
   present; deselected by default in `pyproject.toml` to keep `pytest`
   invocation fast unless `pytest -m corpus` or `pytest -m ''` is used.
+- `@pytest.mark.epubcheck` — shells out to the `epubcheck` binary
+  (skips cleanly when it is not on PATH). Not deselected by default;
+  the CI quality matrix excludes it to stay Java-free, and a dedicated
+  CI job with a JRE runs it (§10).
 
 ---
 
@@ -140,8 +154,13 @@ stories, but every criterion must be explicitly asserted somewhere.
 | US-013 | `integration/test_roundtrip.py` | `test_manifest_element_canonical_xml_identical_after_roundtrip`, `test_spine_element_canonical_xml_identical_after_roundtrip` | Integration |
 | US-014 | `integration/test_cli.py` | `test_default_output_naming_prepare`, `test_default_output_naming_restore`, `test_output_flag_overrides_default`, `test_existing_output_without_force_fails_fast`, `test_existing_output_with_force_overwrites` | Integration (CLI) |
 | US-015 | `integration/test_cli.py` | `test_no_args_shows_usage_with_both_subcommands` | Integration (CLI) |
-| US-016 | `integration/test_roundtrip.py` | (verified manually — documented test recipe) | Manual |
+| US-016 | `integration/test_epubcheck.py` | `test_roundtrip_zero_epubcheck_drift_synthetic` (+ EPUB 3 variants, forced split, inline SVG), `test_roundtrip_zero_epubcheck_drift_corpus` — zero-drift vs the input's own baseline; real post-DeepL output remains a manual check (§9) | Integration (epubcheck) |
 | US-017 | N/A | (PRD compliance only; no functional test) | N/A |
+| US-018 | `integration/test_roundtrip.py`, `unit/test_validator.py` | `test_input_equals_output_path_rejected_prepare`, `test_input_equals_output_path_force_does_not_bypass`, `test_check_output_not_input_raises_on_collision` (command-agnostic; no `restore`-specific CLI test — see §7.2 known gap) | Integration + Unit |
+| US-019 | `integration/test_roundtrip.py` | `test_restored_opf_language_und_fallback_when_missing` | Integration |
+| US-020 | `integration/test_roundtrip.py` | `test_non_xhtml_spine_item_rejected` | Integration |
+| US-021 | `unit/test_payload_split.py`, `unit/test_merge_translated_docs.py`, `integration/test_cli.py`, `integration/test_roundtrip.py`, `integration/test_epubcheck.py` | §6.11 and §6.12 in full; the auto-split CLI block in §7.1 (incl. `test_restore_rejects_duplicate_translated_file_argument`); split round-trips in §7.2; `test_roundtrip_zero_epubcheck_drift_forced_split` | Unit + Integration |
+| US-022 | `unit/test_svg_case.py`, `integration/test_roundtrip.py`, `integration/test_epubcheck.py` | §6.13 in full; `test_prepare_payload_keeps_svg_attribute_case`, `test_roundtrip_svg_attribute_case_preserved`, `test_roundtrip_svg_attribute_case_survives_simulated_translation`; `test_roundtrip_zero_epubcheck_drift_synthetic_epub3_inline_svg` | Unit + Integration |
 
 ---
 
@@ -152,9 +171,10 @@ stories, but every criterion must be explicitly asserted somewhere.
 | SM-1 | Round-trip integrity (no translation) on full corpus | Yes | `test_roundtrip_without_translation_is_content_identical[corpus]` |
 | SM-2 | Translation completeness | Partial; structural integrity automated, translation completeness verified by `simulated_translation` fixture (deterministic regex replacement) and manual sampling on real DeepL output | `test_simulated_translation_completeness` |
 | SM-3 | TOC ↔ heading consistency (byte-equal, normalized whitespace) | Partial; unit-tested for the base NCX case (`test_anchor_resolution.py`'s `resolve_label` tests), integration-tested only for EPUB 3 nav-doc | `test_epub3_nav_labels_consistent_with_ncx_after_translation`, `test_epub3_nav_toc_entry_keeps_translated_label_when_anchor_unresolvable` — see §7.2 Known gap |
-| SM-4 | EPUB validity via `epubcheck` | Automated (`@pytest.mark.epubcheck`) + manual recipe in CONTRIBUTING | CI job exercises the marker against synthetic fixtures |
+| SM-4 | EPUB validity via `epubcheck` (zero-drift vs input baseline) | Yes — synthetic fixtures in the dedicated CI job (JRE); corpus books whenever binary + corpus are present locally; manual recipe in CONTRIBUTING remains for real post-DeepL output | `test_epubcheck.py`, all `test_roundtrip_zero_epubcheck_drift_*` |
 | SM-5 | DeepL quota economy (1 doc per book) | Manual | Documented as user-observable property; no test |
 | SM-6 | CLI turnaround < 60 s | Yes | `test_cli_turnaround_per_book[corpus]` with `pytest-benchmark` or simple `time.monotonic()` wrapper |
+| SM-7 | R-8 regression: adversarial DeepL simulation | Yes | `test_adversarial_translation_strips_data_attribute_surfaces_precise_error`, `test_adversarial_translation_attribute_reorder_still_succeeds`, `test_adversarial_translation_random_seeded_combinations[seeds]` (see the two-tier fixture below) |
 
 ### Simulated translation strategies (two-tier fixture)
 
@@ -520,6 +540,33 @@ are unit tests of the merge function itself).
 - `test_part_markers_absent_from_every_part_is_silent` (markers are
   purely advisory; their total absence is not itself a warning)
 
+### 6.13 `tests/unit/test_svg_case.py`
+
+Covers `epub/_svg_case.py` (US-022 / FR-6) — restoration of
+spec-mandated camelCase SVG/MathML attribute names after the HTML
+parser's unconditional lowercasing. Assertions pin the contract
+(representative names, subtree scoping, idempotence), not the internal
+mapping table, so a reimplementation deriving the names from a
+different source passes unchanged.
+
+- `test_renames_lowercased_attrs_on_svg_root`
+- `test_renames_attrs_on_svg_descendants`
+- `test_math_subtree_is_in_scope`
+- `test_namespaced_svg_element_is_in_scope` (scoping matches local names)
+- `test_plain_html_attributes_outside_svg_untouched`
+  *(critical — a plain-HTML `viewbox` must stay lowercase)*
+- `test_non_case_sensitive_attrs_inside_svg_untouched`
+- `test_correct_case_input_is_unchanged_and_idempotent`
+- `test_html_parser_lowercasing_is_undone_end_to_end` (premise-guarded:
+  first asserts the production HTML parser really lowercases, so the
+  test documents — rather than silently tolerates — the module becoming
+  a no-op if a future lxml/libxml2 stops doing so)
+- Known gap (product-level): element-*name* case (`linearGradient`,
+  `clipPath`, `textPath`, …) is not restored — the module renames
+  attributes only, so a translated chapter using those elements would
+  come back lowercased. No test pins that behaviour pending a product
+  decision (new US or documented limitation).
+
 ---
 
 ## 7. Integration Test Specifications
@@ -696,6 +743,16 @@ faster runs.
     `test_adversarial_translation_strips_data_attribute_surfaces_precise_error`,
     which covers `data-source-href` stripping — that one must fail, this
     one must succeed.)
+- **Embedded SVG attribute case (US-022 / FR-6):**
+  - `test_prepare_payload_keeps_svg_attribute_case` (the payload uploaded
+    to DeepL carries valid camelCase names — prepare extracts through the
+    XML parser, which never lowercases)
+  - `test_roundtrip_svg_attribute_case_preserved` (restore side: the
+    lowercasing HTML parser plus `_svg_case` restoration exercised on the
+    real pipeline, not in isolation)
+  - `test_roundtrip_svg_attribute_case_survives_simulated_translation`
+    (the «PL» transform changes text nodes; SVG attribute names and
+    values must not change)
 
 ### 7.3 EPUB 3.x-specific coverage (`test_roundtrip.py`, `test_cli.py`, `test_epubcheck.py`)
 
@@ -762,6 +819,14 @@ finding versus the un-split round-trip.
   fixture; `epubcheck` fatal/error/warning counts on the restored output
   match the un-split baseline exactly — splitting is purely a transport
   concern and must not corrupt spine ordering, anchors, or nav entries)
+- `test_roundtrip_zero_epubcheck_drift_synthetic_epub3_inline_svg`
+  (US-022 — `epubcheck`, not the internal attribute mapping, is the
+  external arbiter that restored attribute case is spec-valid; the
+  fixture declares manifest `properties="svg"` and its cleanliness is
+  premise-guarded on fatals/errors before the drift comparison)
+- `test_roundtrip_zero_epubcheck_drift_corpus` (`@pytest.mark.corpus` —
+  every corpus book preserves its `epubcheck` verdict exactly; SM-4
+  promoted from a manual recipe to an automated assertion)
 
 ---
 
@@ -799,16 +864,18 @@ Generated on demand via factory parameters:
 | EPUB 3.x, nav landmarks + page-list | `epub_version="3.0", nav_landmarks=[("Cover", "ch01.xhtml")], nav_page_list=[("1", "ch01.xhtml#page_1")]` |
 | EPUB 3.x, `refines` metadata | `epub_version="3.0", title_id="t1"` (`<meta refines="#t1" property="...">`) |
 | NCX or nav in a subdirectory, OPF at ZIP root | factory places `toc.ncx`/nav under `OEBPS/` while the OPF manifest root is the ZIP root — pins the anchor-resolution path-normalization fix |
+| Inline SVG in a chapter (US-022) | `XhtmlSpec(..., body_html='<svg xmlns="…" viewBox="…" preserveAspectRatio="…">…</svg>', properties="svg")` — the `properties` field keeps the manifest epubcheck-clean (OPF-014) |
 
 ### Corpus
 
 `tests/corpus/` is the default corpus directory (overridable via the
 `EPUB_DEEPL_CORPUS` environment variable). The repo bundles one
-real-world fixture from Project Gutenberg
-(`alice-pg11.epub`, ~137 KB, EPUB 2.0 + NCX) as a baseline proof
+real-world Project Gutenberg fixture per supported EPUB version —
+`alice-pg11.epub` (~137 KB, EPUB 2.0 + NCX) and `alice-pg11-epub3.epub`
+(~185 KB, EPUB 3.0: nav doc + legacy NCX) — as a baseline proof
 that the tool round-trips against an actual publisher pipeline.
 
-Contributors are encouraged to drop additional EPUB 2 + NCX books
+Contributors are encouraged to drop additional EPUB 2 / EPUB 3 books
 into `tests/corpus/` to broaden coverage — different genres
 (novels, technical books, workbooks), different publisher pipelines
 (Manning, O'Reilly, Calibre-generated, etc.), and different
@@ -870,13 +937,18 @@ addopts = "-ra -q --strict-markers -m 'not corpus'"
 markers = [
   "unit: fast, no I/O beyond temp files",
   "integration: synthetic EPUB end-to-end",
-  "corpus: requires tests/corpus/ (override via EPUB_DEEPL_CORPUS env var); opt-in",
+  "corpus: requires real EPUB files in tests/corpus/ (override path via EPUB_DEEPL_CORPUS env var); opt-in",
+  "epubcheck: requires the `epubcheck` binary on PATH (W3C validator); opt-in",
 ]
 ```
 
-### Per-module coverage floors
+### Per-module coverage targets (aspirational)
 
-| Module | Floor |
+Only the global `fail_under = 85` is CI-enforced (§1); the table below
+records per-module aspirations for prioritising future test work, not
+independently gated floors.
+
+| Module | Target |
 |---|---|
 | `epub/validator.py` | 100% |
 | `epub/writer.py` | 100% |
@@ -890,7 +962,20 @@ markers = [
 
 ### CI
 
-Out of MVP scope (per tech-stack.md §6). Local pre-commit hook documented:
+GitHub Actions (`.github/workflows/ci.yml`) runs on every push and PR:
+
+- **quality matrix** (Python 3.11 / 3.12 / 3.13): `ruff check`,
+  `ruff format --check`, `mypy --strict src/epub_deepl`, then
+  `pytest -m "not corpus and not epubcheck"` — Java-free cells.
+- **epubcheck job**: one cell with a JRE and a pinned, hash-verified
+  `epubcheck`; runs the `epubcheck`-marked tests against synthetic
+  fixtures.
+
+Corpus-marked tests stay local-only (the bundled corpus is a smoke
+baseline; larger personal libraries are wired in via
+`EPUB_DEEPL_CORPUS`).
+
+A local pre-commit hook mirrors the fast cells:
 
 ```yaml
 - repo: local
@@ -905,6 +990,9 @@ Out of MVP scope (per tech-stack.md §6). Local pre-commit hook documented:
 ---
 
 ## 11. Test Implementation Order
+
+*(Historical — the MVP build order, preserved for context; the suite
+has since been implemented in full.)*
 
 Match the implementation order in tasks #9–#11. Tests are written
 **alongside** code in each implementation slice — no test-after.
@@ -925,7 +1013,7 @@ Each slice's tests must pass before the next slice begins.
 
 | Gap | Rationale |
 |---|---|
-| No automated `epubcheck` invocation | Java runtime in test path; cost > benefit for MVP; documented manual step |
+| Real post-DeepL output validated manually | `epubcheck` automation covers the round-trip-without-translation path (CI: synthetic fixtures; local: corpus books); actual translated EPUBs are still user-validated per US-016 / §9 |
 | No real DeepL round-trip in automated suite | Non-deterministic, network-bound, quota-limited; simulated_translation fixture is the automated proxy |
 | No test for very large EPUBs (> 200 MB) | Outside PRD scope; no corpus to exercise; would only test memory ceiling already documented |
 | No GUI / reader compatibility tests | No GUI; reader compatibility verified by passing `epubcheck` |
