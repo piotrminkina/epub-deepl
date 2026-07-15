@@ -246,6 +246,12 @@ Known limitations:
   split — auto-split only ever breaks between sections, never inside
   one. Raise `--max-chars` or split the offending chapter in the
   source EPUB.
+- Embedded SVG: attribute-name case is restored after translation
+  (`viewBox`, `preserveAspectRatio`, …), but element-*name* case
+  (`linearGradient`, `clipPath`, …) is not — a book embedding such
+  elements fails its `epubcheck` step after restore. Deferred until
+  observed in a real corpus; see
+  [`docs/TODO.md`](docs/TODO.md).
 
 ## License
 

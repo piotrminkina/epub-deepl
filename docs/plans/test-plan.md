@@ -564,8 +564,9 @@ different source passes unchanged.
 - Known gap (product-level): element-*name* case (`linearGradient`,
   `clipPath`, `textPath`, …) is not restored — the module renames
   attributes only, so a translated chapter using those elements would
-  come back lowercased. No test pins that behaviour pending a product
-  decision (new US or documented limitation).
+  come back lowercased. Deliberately deferred as a documented
+  limitation with a data-driven promotion trigger — see
+  [`docs/TODO.md`](../TODO.md) and README "Known limitations".
 
 ---
 
