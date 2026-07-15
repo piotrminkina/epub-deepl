@@ -171,13 +171,29 @@ external command invocation in MVP), `urllib` (no network), `os.system`
 
 ## 6. CI / Continuous Integration
 
-Out of MVP scope. Solo project, no automation needed beyond local
-pre-commit hooks. Documented as a known future addition if the project
-ever has external contributors.
+**GitHub Actions** (`.github/workflows/ci.yml`), running on every push
+and PR. Originally deferred as out-of-MVP-scope; added once the project
+went public on GitHub, since the marginal cost of a hosted workflow
+turned out to be far below maintaining the discipline of manual
+pre-push runs.
 
-If added later, GitHub Actions or GitLab CI would run the same devcontainer
-image to maintain dev/CI parity, executing `ruff check`, `mypy`, and
-`pytest` in that order.
+- **quality matrix** — Python 3.11 / 3.12 / 3.13 cells, each running
+  `ruff check`, `ruff format --check`, `mypy --strict src/epub_deepl`,
+  and `pytest -m "not corpus and not epubcheck"`. Kept Java-free so
+  the matrix stays fast.
+- **epubcheck job** — a single cell that installs a JRE plus a pinned,
+  hash-verified `epubcheck` release and runs the `epubcheck`-marked
+  tests against synthetic fixtures (SM-4 zero-drift).
+
+Corpus-marked tests stay local-only: the bundled corpus is a smoke
+baseline, and larger personal libraries (via `EPUB_DEEPL_CORPUS`)
+cannot be committed for licensing reasons.
+
+The CI cells intentionally run on plain `setup-python` rather than the
+devcontainer image — dependency surface is small (lxml + dev tools),
+and interpreter-matrix coverage matters more than image parity here.
+The devcontainer remains the reference environment for development and
+for corpus/epubcheck runs.
 
 ---
 
