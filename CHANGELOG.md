@@ -133,6 +133,11 @@ tagged.
 
 ### Fixed
 
+- **Dev Container `post-create.sh` failed with exit 127 on a stale
+  venv.** A workspace rename (or image rebuild) severs the venv's
+  `bin/` symlinks; the directory-existence check reused it anyway and
+  `pip` died mid-bootstrap. The script now probes the interpreter
+  directly and rebuilds the venv when it no longer executes.
 - **OPF metadata rebuild dropped attributes (`id`, `xml:lang`,
   `opf:*`) from `dc:title`/`dc:description`/`dc:subject`, orphaning
   EPUB 3 `refines` metadata; text is now mutated in place.**

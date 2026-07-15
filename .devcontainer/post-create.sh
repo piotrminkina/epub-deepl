@@ -13,7 +13,9 @@
 #
 # Idempotent: re-running on an already-bootstrapped tree short-circuits
 # on `pip install`. A versioned venv created in a prior post-create
-# run for the same Python minor is reused as-is.
+# run for the same Python minor is reused when its interpreter still
+# executes, and rebuilt from scratch when it does not (e.g. after a
+# workspace rename severed the bin/ symlinks).
 
 set -euo pipefail
 
@@ -26,6 +28,15 @@ readonly VENV_DIR="${WORKSPACE}/.venv-${PY_MINOR}"
 echo "[post-create] workspace = ${WORKSPACE}"
 echo "[post-create] python    = $(python3 --version)"
 echo "[post-create] venv dir  = ${VENV_DIR}"
+
+# A venv directory can outlive its interpreter: renaming the workspace breaks
+# the bin/ symlinks and entry-point shebangs, and an image rebuild can swap the
+# Python binary out from under it. Probe the interpreter directly and rebuild
+# instead of failing later with a cryptic exit 127 from pip.
+if [[ -d "${VENV_DIR}" ]] && ! "${VENV_DIR}/bin/python" -c 'import sys' >/dev/null 2>&1; then
+  echo "[post-create] venv at ${VENV_DIR} has a dead interpreter — rebuilding"
+  rm -rf "${VENV_DIR}"
+fi
 
 if [[ ! -d "${VENV_DIR}" ]]; then
   echo "[post-create] creating venv at ${VENV_DIR}"
