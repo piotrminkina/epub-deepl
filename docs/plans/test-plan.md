@@ -128,13 +128,13 @@ stories, but every criterion must be explicitly asserted somewhere.
 | US-001 | `integration/test_cli.py` | `test_prepare_emits_html_file`, `test_prepare_html_has_section_per_spine_item`, `test_prepare_html_head_contains_title_and_description`, `test_prepare_html_nav_block_carries_ncx_data` | Integration (synth) |
 | US-002 | `integration/test_cli.py`, `integration/test_roundtrip.py` | `test_restore_emits_epub_file`, `test_simulated_translation_completeness` (translated metadata lands in output OPF), `test_roundtrip_zip_invariants_synth` (mimetype-first ZIP) | Integration (synth) |
 | US-003 | `unit/test_validator.py` | `test_validate_rejects_drm_protected_epub` | Unit |
-| US-004 | `unit/test_validator.py` | `test_validate_rejects_manifest_with_missing_file`, `test_validate_lists_all_missing_files` | Unit |
+| US-004 | `unit/test_validator.py` | `test_validate_rejects_manifest_with_missing_file`, `test_validate_lists_all_missing_files_in_error` | Unit |
 | US-005 | `unit/test_validator.py` | `test_validate_rejects_spine_with_unresolved_idref` | Unit |
 | US-006 | `integration/test_roundtrip.py` | `test_roundtrip_without_translation_is_content_identical[corpus]` (parametrized across the corpus directory), `test_roundtrip_without_translation_synth_minimal`, `test_roundtrip_without_translation_synth_with_nested_ncx`, `test_roundtrip_without_translation_synth_with_mathml` | Integration (synth + corpus) |
 | US-007 | `integration/test_roundtrip.py` | `test_simulated_translation_completeness` (shared with US-002) | Integration |
-| US-008 | `unit/test_anchor_resolution.py` | `test_resolve_label_with_fragment`, `test_resolve_label_without_fragment_uses_first_heading`, `test_resolve_label_no_fragment_no_heading_falls_back_to_flat_label`, `test_resolve_label_per_file_scoping_prevents_id_collisions`, `test_resolve_label_normalizes_whitespace` | Unit |
-| US-009 | `unit/test_opf.py` | `test_opf_set_language_replaces_first_dc_language`, `test_opf_set_language_removes_extras_when_multiple_present` | Unit |
-| US-010 | `unit/test_opf.py` | `test_opf_preserves_non_translated_fields_byte_identical[creator]`, `test_opf_preserves_non_translated_fields_byte_identical[publisher]`, `test_opf_preserves_non_translated_fields_byte_identical[identifier]`, `test_opf_preserves_non_translated_fields_byte_identical[date]`, `test_opf_preserves_non_translated_fields_byte_identical[rights]`, `test_opf_preserves_opf_namespaced_attributes` | Unit |
+| US-008 | `unit/test_anchor_resolution.py` | `test_resolve_label_with_fragment`, `test_resolve_label_without_fragment_uses_first_heading`, `test_resolve_label_no_heading_falls_back_to_flat_label`, `test_resolve_label_id_collision_across_files_scoped_per_file`, `test_resolve_label_with_fragment_returns_normalized_whitespace` | Unit |
+| US-009 | `unit/test_opf.py` | `test_set_language_replaces_first_dc_language`, `test_set_language_preserves_extras_and_warns_when_multiple` (extras are preserved with a WARNING, not collapsed — see CHANGELOG "Changed") | Unit |
+| US-010 | `unit/test_opf.py` | `test_apply_translated_metadata_preserves_non_translated_fields` (asserts `dc:creator` structurally preserved; `publisher`/`date`/`identifier` appear in the fixture but are not independently asserted, and `dc:rights` has no coverage — known gap), `test_rebuild_preserves_dc_subject_and_description_attributes` (xml:lang / opf:authority / opf:term preserved on subject and description) | Unit |
 | US-011 | `integration/test_roundtrip.py` | `test_mathml_receives_translate_no_in_prepare`, `test_roundtrip_without_translation_synth_with_mathml` | Integration (synth) |
 | US-012 | `integration/test_cli.py` | `test_ruby_annotations_emit_warning_to_stderr`, `test_ruby_does_not_affect_exit_code` | Integration (synth) |
 | US-013 | `integration/test_roundtrip.py` | `test_manifest_element_canonical_xml_identical_after_roundtrip`, `test_spine_element_canonical_xml_identical_after_roundtrip` | Integration |
@@ -206,11 +206,24 @@ exclusively via the adversarial fixture.
 - `test_parse_extracts_descriptions_subjects_creators`
 - `test_parse_preserves_opf_namespaced_meta_extensions`
 - `test_set_language_replaces_first_dc_language`
-- `test_set_language_removes_extras_when_multiple`
-- `test_apply_translated_metadata_count_mismatch_raises`
-- `test_apply_translated_metadata_preserves_non_translated_byte_identical`
-- `test_opf_serialization_preserves_xml_declaration`
-- `test_opf_serialization_preserves_extension_namespaces` (Calibre, Apple)
+- `test_set_language_preserves_extras_and_warns_when_multiple` (multiple
+  `dc:language` elements are no longer collapsed to one; the first is set
+  to the target language and extras are preserved with a WARNING — see
+  CHANGELOG "Changed")
+- Known gap: metadata-count-mismatch validation (`_validate_metadata_counts`
+  in `restore/applier.py`, raises `TranslatedHtmlMismatch` when translated
+  title/description/subject counts differ from the original) has no unit
+  test at all — `tests/unit/test_applier.py` does not exist, and no
+  integration test exercises this path either. Previously misattributed
+  here as an `opf.py` test; the validation actually lives in
+  `restore/applier.py`.
+- `test_apply_translated_metadata_preserves_non_translated_fields` (asserts
+  `dc:creator` structurally preserved; not parametrized across fields —
+  see the US-010 row for the coverage caveat)
+- Known gap: no test asserts the rebuilt OPF carries an XML declaration.
+- `test_parse_preserves_opf_namespaced_meta_extensions` covers Calibre
+  extension namespaces (`calibre:series`); Apple-specific extensions
+  (e.g. `ibooks:specified-fonts`) are a known gap — untested.
 
 ### 6.2 `tests/unit/test_ncx.py`
 
@@ -219,7 +232,10 @@ exclusively via the adversarial fixture.
 - `test_parse_preserves_play_order`
 - `test_serialize_replaces_navlabel_text_only`
 - `test_serialize_preserves_dtb_meta_uid`
-- `test_serialize_preserves_attribute_ordering`
+- Known gap: no test asserts NCX attribute *order* is preserved after
+  rebuild. The closest existing test, `test_ncx_canonical_xml_manifest_preserved`,
+  only checks that `src` attribute *values* survive — its canonical-XML
+  comparison loop is a no-op despite the docstring's claim.
 
 ### 6.3 `tests/unit/test_anchor_resolution.py`
 
@@ -230,22 +246,25 @@ exclusively via the adversarial fixture.
 - `test_resolve_label_h2_used_when_no_h1`
 - `test_resolve_label_h3_used_when_no_h1_h2`
 - `test_resolve_label_no_heading_falls_back_to_flat_label`
-- `test_resolve_label_missing_fragment_walks_to_heading_ancestor`
+- Known gap: no test covers a fragment that resolves to a non-heading
+  descendant which must then walk up to its nearest heading ancestor;
+  the only fragment-match path tested is a direct id lookup (see
+  `test_resolve_label_with_fragment`).
 - `test_resolve_label_missing_fragment_no_heading_falls_back_to_flat_label`
 - `test_resolve_label_id_collision_across_files_scoped_per_file`
   *(critical — mitigates R-4)*
-- `test_resolve_label_src_with_no_target_file_raises_internal_error`
-- `test_resolve_anchor_label_ncx_in_subdir_opf_at_zip_root`
+- Known gap: no test covers `src` referencing a target file absent from
+  `epub.xhtmls`. The closest existing test,
+  `test_resolve_anchor_label_returns_none_when_unresolvable`, covers an
+  *existing* target file with no heading (returns `None`, not a raise) —
+  a different scenario.
+- `test_resolve_anchor_label_nested_base_regression`
   *(pins the absolute-path normalization fix — the exact layout that
   triggered the latent bug: OPF at the ZIP root, NCX/nav in a
   subdirectory)*
-- `test_resolve_anchor_label_relative_traversal_within_root_allowed`
+- `test_resolve_anchor_label_dotdot_within_root_allowed`
   (`../../` segments that stay inside the OPF root resolve correctly)
-- `test_resolve_anchor_label_path_escaping_opf_root_raises_internal_error`
-- `test_resolve_label_all_existing_cases_pass_unchanged_after_generalization`
-  *(regression guard: every pre-existing test in this module continues
-  to exercise `resolve_label`'s unchanged signature and fallback
-  contract now that it is a thin wrapper over `resolve_anchor_label`)*
+- `test_resolve_anchor_label_escape_above_root_raises`
 
 ### 6.4 `tests/unit/test_zip_packaging.py`
 
@@ -271,23 +290,30 @@ check is blind to ZIP-level violations.
 - `test_validate_rejects_missing_mimetype`
 - `test_validate_rejects_wrong_mimetype_content`
 - `test_validate_rejects_missing_container_xml`
-- `test_validate_rejects_unparseable_opf`
+- Known gap: no test covers an unparseable (malformed XML) OPF document —
+  existing tests only cover ZIP-level and manifest/spine-level failures.
 - `test_validate_rejects_drm_protected_epub`
 - `test_validate_rejects_manifest_with_missing_file`
 - `test_validate_lists_all_missing_files_in_error`
 - `test_validate_rejects_spine_with_unresolved_idref`
 - `test_validate_rejects_missing_ncx`
-- `test_validate_rejects_unparseable_ncx`
-- `test_validate_accepts_epub3_with_nav_doc_no_ncx`
-- `test_validate_accepts_epub3_with_both_nav_doc_and_ncx`
-- `test_validate_rejects_epub3_missing_nav_doc`
-- `test_validate_rejects_epub3_unparseable_nav_doc`
-- `test_validate_rejects_epub2_missing_ncx_even_when_nav_doc_present`
-  (EPUB 2.x never falls back to nav-doc-only navigation)
+- Known gap: no test covers an unparseable (malformed XML) NCX document.
+- `test_validate_epub3_ncx_optional_when_nav_doc_present`
+- `test_validate_accepts_minimal_epub3_with_nav_doc`
+- `test_validate_rejects_missing_nav_doc_for_epub3`
+- Known gap: no test covers an unparseable (malformed XML) nav document —
+  existing coverage only handles the nav doc being absent (`nav_doc is None`).
+- Known gap: `test_validate_rejects_missing_ncx` covers an EPUB 2 book
+  missing its NCX, but not the more specific edge case of an EPUB 2 book
+  missing NCX *while a nav document happens to be present* (EPUB 2.x never
+  falls back to nav-doc-only navigation).
 - `test_validate_translated_html_missing_sections` (extended to cover a
   missing non-spine nav-doc section)
 - `test_validate_translated_html_unknown_sections`
-- `test_validate_translated_html_title_count_mismatch`
+- Known gap: no test covers a title/description/subject count mismatch
+  raising during OPF metadata restoration — see the equivalent gap noted
+  in §6.1 (`restore/applier.py`'s `_validate_metadata_counts`, entirely
+  untested).
 
 ### 6.6 `tests/unit/test_xhtml.py`
 
@@ -326,27 +352,32 @@ primary-subtag extraction. Powers the US-009 lang resolver.
 Covers the new `epub/nav.py` module — parse, body extraction, rebuild,
 structure guard, and label resolution.
 
-- `test_parse_nav_doc_finds_toc_nav_by_epub_type`
-- `test_parse_nav_doc_falls_back_to_doc_toc_role`
-- `test_parse_nav_doc_falls_back_to_first_nav_with_ol`
-- `test_parse_nav_doc_extracts_nested_toc_entries_in_pre_order`
-- `test_parse_nav_doc_entry_ids_are_deterministic_across_reparse`
-  (same input → same `navdoc-toc-{N}` ids, never DeepL-derived)
-- `test_parse_nav_doc_has_toc_nav_false_when_no_toc_nav_present`
-- `test_parse_nav_doc_detects_in_spine`
-- `test_extract_nav_body_html_returns_inner_html_string`
-- `test_extract_nav_body_html_marks_page_list_translate_no`
-  (`epub:type~=page-list`)
-- `test_extract_nav_body_html_marks_page_list_translate_no_via_doc_pagelist_role`
-- `test_extract_nav_body_html_leaves_toc_and_landmarks_translatable`
-- `test_rebuild_nav_doc_bytes_overwrites_toc_labels_only`
-- `test_rebuild_nav_doc_bytes_preserves_landmarks_and_page_list_structure`
-- `test_rebuild_nav_doc_bytes_structure_guard_falls_back_on_shape_mismatch`
+- `test_parse_flat_toc`
+- `test_parse_toc_via_role_fallback`
+- `test_parse_toc_via_ol_heuristic_fallback`
+- `test_parse_nested_toc_preorder_ids`
+- Known gap: no test reparses the same nav doc twice and compares
+  `navdoc-toc-{N}` ids for determinism.
+- `test_parse_no_toc_nav_found`
+- `test_parse_in_spine_flag_passthrough`
+- `test_extract_nav_body_html_contains_toc_content`
+- `test_extract_nav_body_html_marks_page_list_no_translate`
+  (`epub:type~=page-list`; the same test also asserts toc and landmarks
+  are left translatable)
+- `test_extract_nav_body_html_marks_page_list_via_role_fallback`
+- `test_rebuild_replaces_body_and_applies_labels`
+- Known gap: no test asserts that rebuilding the nav doc leaves the
+  `landmarks` nav and `page-list` nav structurally untouched; existing
+  tests around the page-list nav
+  (`test_rebuild_strips_injected_page_list_translate_marker`,
+  `test_rebuild_preserves_author_supplied_page_list_translate_attr`) only
+  check the `translate` attribute, not general structural preservation.
+- `test_rebuild_structure_guard_falls_back_on_shape_mismatch`
   *(critical — pins the ADR-0005 structure guard: a reshaped `toc`
   `<ol>`/`<li>` tree keeps the translated body as-is and emits `[WARN]`
   instead of overwriting with misaligned labels)*
-- `test_resolve_nav_labels_uses_resolve_anchor_label`
-- `test_resolve_nav_labels_omits_unresolvable_entries`
+- `test_resolve_nav_labels_flat_entries_resolve_from_headings`
+- `test_resolve_nav_labels_unresolvable_entry_omitted`
   (translated anchor text stands, per ADR-0005, rather than falling
   back to a flat label like NCX does)
 
@@ -356,20 +387,27 @@ Covers the OPF `version` gate and nav-doc discovery in
 `epub/reader.py` — both previously untested (the gate defaulted
 silently to EPUB 2.0 handling).
 
-- `test_reader_accepts_version_2_x` (parametrized: `2.0`, `2.0.1`)
-- `test_reader_accepts_version_3_x` (parametrized: `3.0`, `3.2`)
-- `test_reader_captures_epub_version_and_major_version_verbatim`
-- `test_reader_rejects_version_1_x`
-- `test_reader_rejects_version_4_x`
-- `test_reader_rejects_missing_version_attribute`
-- `test_reader_skips_nav_doc_discovery_for_epub_2_x`
+- `test_reader_accepts_epub_2_0` (also asserts `epub_version`/`major_version`
+  captured verbatim)
+- `test_reader_accepts_epub_2_x_non_dot_zero_variant` (tests `2.1`; no test
+  covers `2.0.1` specifically — known gap)
+- `test_reader_accepts_epub_3_0_with_nav_doc` (also asserts
+  `epub_version`/`major_version` captured verbatim, and that the nav doc is
+  discovered via its manifest `properties="nav"` token); no test covers
+  `3.2` — known gap
+- `test_reader_rejects_version_1_0`
+- `test_reader_rejects_version_4_0`
+- `test_reader_rejects_absent_version_attribute`
+- `test_reader_epub2_skips_nav_discovery_even_if_nav_item_present`
   (`nav_doc` stays `None` even if a stray `properties="nav"` item exists)
-- `test_reader_finds_nav_doc_by_properties_token_for_epub_3_x`
-- `test_reader_raises_missing_nav_doc_when_no_manifest_item_has_nav_token`
-- `test_reader_raises_missing_nav_doc_when_nav_href_not_in_zip`
-- `test_reader_adds_nav_doc_path_to_skip_paths_not_other_files`
-- `test_reader_detects_nav_doc_in_spine`
-- `test_reader_detects_nav_doc_not_in_spine`
+- `test_reader_epub3_without_nav_item_leaves_nav_doc_none` (this is *not*
+  a raise at the reader layer — `nav_doc` simply stays `None`; raising
+  `MissingNavDoc` for this case is deferred to the validator layer, see
+  `test_validate_rejects_missing_nav_doc_for_epub3` in §6.5)
+- `test_reader_rejects_missing_nav_doc_file`
+- `test_reader_nav_doc_excluded_from_other_files`
+- `test_reader_nav_doc_in_spine_detected`
+- `test_reader_nav_doc_not_in_spine_by_default`
 
 ### 6.11 `tests/unit/test_payload_split.py`
 
@@ -619,8 +657,13 @@ faster runs.
   checks that each expected subject string is present as a UTF-8 fragment,
   but a translator response that dropped or duplicated a subject entry
   would not be caught by it.
-- `test_input_equals_output_path_rejected[prepare]` *(US-018)*
-- `test_input_equals_output_path_rejected[restore]` *(US-018)*
+- `test_input_equals_output_path_rejected_prepare` *(US-018)*
+- Known gap: no CLI-integration-level test covers `restore` hitting this
+  same input==output rejection. The underlying `check_output_not_input`
+  function is unit-tested command-agnostically
+  (`test_check_output_not_input_raises_on_collision`,
+  `tests/unit/test_validator.py`), but that does not exercise the
+  `restore` subcommand path specifically.
 - `test_input_equals_output_path_force_does_not_bypass` *(US-018)*
 - `test_non_xhtml_spine_item_rejected` *(US-020)*
 - `test_adversarial_translation_strips_data_attribute_surfaces_precise_error` *(SM-7)*
