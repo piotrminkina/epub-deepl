@@ -189,11 +189,14 @@ Detailed architecture and edge cases:
 
 ### In scope (MVP)
 
-- EPUB 2.0.1 with NCX-based navigation
+- EPUB 2.x with NCX-based navigation
 - Reflowable EPUB 3.x with nav-document navigation (NCX optional; both
   kept in sync when present)
 - Round-trip preservation of all human-visible content + OPF / NCX
   structural metadata required by e-readers
+- Embedded (inline-in-XHTML) SVG and MathML round-trip with
+  spec-mandated camelCase attribute names restored (see FR-6 / US-022
+  in [`docs/plans/prd.md`](docs/plans/prd.md))
 - DeepL HTML document compatibility (HTML5 self-contained payload)
 - Solo-user CLI workflow with manual upload / download to DeepL
 - Pre-flight validation of the input EPUB (fail-fast on DRM, broken

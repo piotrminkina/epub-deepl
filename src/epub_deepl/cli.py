@@ -1,8 +1,10 @@
 """CLI entry point for epub-deepl.
 
+Global flags (before the subcommand): [--verbose/-v] [--version]
+
 Subcommands:
-  prepare <input.epub> [--output FILE] [--force] [--verbose]
-  restore <input.epub> <translated.html> --lang CODE [--output FILE] [--force] [--verbose]
+  prepare <input.epub> [--output FILE] [--force] [--max-chars N]
+  restore <input.epub> <translated.html>... [--lang CODE] [--output FILE] [--force]
 
 Exit codes:
   0 — success

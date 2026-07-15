@@ -49,11 +49,12 @@ What the container provides out of the box:
 - Standard utilities for round-trip integrity checks: `unzip`,
   `diffutils`, `git`, `curl`
 
-Corpus EPUBs live in `tests/corpus/` (gitignored except for the
-bundled Project Gutenberg Alice fixture and its README). To run
-corpus tests against your own collection without copying files,
-either drop them into `tests/corpus/` or point at any directory via
-the `EPUB_DEEPL_CORPUS` environment variable.
+Corpus EPUBs live in `tests/corpus/` (gitignored except for the two
+bundled Project Gutenberg Alice fixtures — EPUB 2 and EPUB 3 — and
+their README). To run corpus tests against your own collection
+without copying files, either drop them into `tests/corpus/` (your
+own books stay gitignored) or point at any directory via the
+`EPUB_DEEPL_CORPUS` environment variable.
 
 > **Identity model:** the container runs as a non-root user
 > (`devcontainer`) whose UID is matched to the host at container
@@ -104,7 +105,10 @@ source ".venv-$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.ve
 # Fast tests only (unit + synth integration; skips the corpus)
 pytest
 
-# Full suite including corpus parametrization
+# Full suite including corpus parametrization. pyproject's addopts
+# defaults to `-m 'not corpus'`; passing `-m` on the CLI overrides that
+# default, and `not corpus or corpus` is a tautology re-selecting
+# everything (corpus tests plus the rest).
 pytest -m 'not corpus or corpus'
 
 # Just the corpus parametrization (requires tests/corpus/ populated,
@@ -231,7 +235,7 @@ enough that local consistency is the right baseline.
 │   ├── lessons-learned.md         Operational gotchas, DeepL behaviour
 │   │                              catalog, process retrospective
 │   └── plans/                     Forward-looking design artifacts
-│       ├── prd.md                 Product requirements (US-001..US-020,
+│       ├── prd.md                 Product requirements (US-001..US-022,
 │       │                          SM-1..SM-7)
 │       ├── tech-stack.md          Technology choices, alternatives
 │       ├── tech-spec.md           Internal architecture, data model,
@@ -242,6 +246,7 @@ enough that local consistency is the right baseline.
 │   ├── errors.py                  Typed exception hierarchy
 │   ├── logging_setup.py           stderr formatting, --verbose flag
 │   ├── epub/                      EPUB I/O and structural model
+│   │   ├── _bcp47.py              BCP 47 language-tag validation (US-009)
 │   │   ├── _safe_parser.py        Centralised lxml parser factory (XXE-safe)
 │   │   ├── _svg_case.py           SVG/MathML attribute case restoration
 │   │   ├── model.py               Dataclasses: Epub, ManifestItem, etc.
@@ -250,6 +255,7 @@ enough that local consistency is the right baseline.
 │   │   ├── validator.py           Fail-fast input validation
 │   │   ├── opf.py                 OPF parse + edit
 │   │   ├── ncx.py                 NCX parse + edit + anchor resolution
+│   │   ├── nav.py                 EPUB 3 nav-document parse + edit + labels
 │   │   └── xhtml.py               XHTML body extraction/replacement
 │   ├── merge/builder.py           Epub model → merged HTML5
 │   └── restore/                   Translated HTML → updated Epub model
