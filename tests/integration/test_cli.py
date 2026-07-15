@@ -7,7 +7,9 @@ import sys
 
 import pytest
 
-from tests.fixtures.minimal import XhtmlSpec, build_minimal_epub
+from epub_deepl.epub.reader import read_epub_bytes
+from epub_deepl.merge.builder import _PART_MARKER_RESERVE, _build_plan
+from tests.fixtures.minimal import NavPointSpec, XhtmlSpec, build_minimal_epub
 
 
 def _run_cli(args: list[str]) -> tuple[int, str]:
@@ -526,3 +528,302 @@ def test_lang_no_drift_warning_when_primary_subtag_changes(
     )
     assert rc == 0
     assert "primary subtag matches" not in stderr
+
+
+# ---------------------------------------------------------------------------
+# Payload splitting (WP4/WP5/WP6 — see docs/adr/0006)
+# ---------------------------------------------------------------------------
+
+
+def _force_split_epub_bytes(n_chapters: int = 5, filler: int = 2000) -> bytes:
+    """A synthetic EPUB 3 whose chapters are wide enough that a small
+    `--max-chars` reliably forces `prepare` to split, without tripping
+    the per-section `OversizedSection` limit.
+
+    Passes an explicit `nav_map` (one entry per chapter, no fragment) --
+    `build_minimal_epub`'s auto-derivation falls back to a hardcoded
+    3-entry template referencing `#ch1-heading`/`#ch2-heading`/
+    `#ch3-heading` once `len(xhtmls) >= 3`, anchors that don't exist in
+    these padded bodies.
+    """
+    xhtmls = [
+        XhtmlSpec(
+            href=f"ch{i:02d}.xhtml",
+            title=f"Chapter {i}",
+            body_html=f"<p>{'X' * filler}</p>",
+        )
+        for i in range(1, n_chapters + 1)
+    ]
+    nav_map = [
+        NavPointSpec(label=f"Chapter {i}", src=f"ch{i:02d}.xhtml", nav_id=f"navPoint-{i}")
+        for i in range(1, n_chapters + 1)
+    ]
+    return build_minimal_epub(epub_version="3.0", xhtmls=xhtmls, nav_map=nav_map)
+
+
+def _max_chars_forcing_two_sections_per_part(epub_bytes: bytes) -> int:
+    """Compute a `--max-chars` value from the payload's own measured
+    envelope/preamble/section lengths (rather than a guessed constant) so
+    packing reliably fits exactly two sections per part regardless of
+    implementation-detail overhead — same technique as
+    tests/unit/test_payload_split.py.
+    """
+    epub = read_epub_bytes(epub_bytes)
+    plan = _build_plan(epub)
+    envelope_len = len(plan.envelope_open) + len(plan.envelope_close)
+    # Use the LARGEST section, not sections[0] -- for an EPUB 3 fixture,
+    # section 0 is often the (small) non-spine nav doc, not a chapter, and
+    # sizing off it would starve the budget for the actual chapters.
+    max_section_len = max(len(section.html) for section in plan.sections)
+    return envelope_len + _PART_MARKER_RESERVE + len(plan.preamble) + 2 * max_section_len
+
+
+def _prepare_split(
+    epub_path: pathlib.Path, output: pathlib.Path, max_chars: int
+) -> list[pathlib.Path]:
+    """Run `prepare --max-chars` and return the sorted list of part paths
+    actually written to disk."""
+    rc, stderr = _run_cli(
+        ["prepare", str(epub_path), "--output", str(output), "--max-chars", str(max_chars)]
+    )
+    assert rc == 0, f"Expected exit 0, got {rc}. Stderr: {stderr}"
+    assert not output.exists()
+    parts = sorted(output.parent.glob(f"{output.stem}.*of*{output.suffix}"))
+    assert len(parts) > 1, f"expected a split, got: {parts}"
+    return parts
+
+
+@pytest.mark.integration
+def test_prepare_max_chars_negative_rejected(
+    synth_epub_file: pathlib.Path, tmp_path: pathlib.Path
+) -> None:
+    """A negative --max-chars is rejected with a clear message (0 disables
+    splitting; negative values are meaningless)."""
+    rc, stderr = _run_cli(
+        [
+            "prepare",
+            str(synth_epub_file),
+            "--output",
+            str(tmp_path / "out.html"),
+            "--max-chars",
+            "-1",
+        ]
+    )
+    assert rc == 1
+    assert "[ERROR]" in stderr
+    assert "--max-chars must be >= 0" in stderr
+
+
+@pytest.mark.integration
+def test_prepare_max_chars_above_one_million_warns_but_succeeds(
+    synth_epub_file: pathlib.Path, tmp_path: pathlib.Path
+) -> None:
+    """--max-chars above DeepL's own document limit still runs (the user's
+    call), but emits a WARN since the resulting request may be rejected."""
+    output = tmp_path / "out.html"
+    rc, stderr = _run_cli(
+        ["prepare", str(synth_epub_file), "--output", str(output), "--max-chars", "2000000"]
+    )
+    assert rc == 0
+    assert output.exists()
+    assert "[WARN]" in stderr
+    assert "exceeds DeepL" in stderr
+
+
+@pytest.mark.integration
+def test_prepare_splits_into_named_parts_when_payload_exceeds_max_chars(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A payload forced over --max-chars is written as NofM-named parts,
+    never as the base output path, with a WARN summarising the split."""
+    epub_bytes = _force_split_epub_bytes()
+    epub_path = tmp_path / "wide.epub"
+    epub_path.write_bytes(epub_bytes)
+    max_chars = _max_chars_forcing_two_sections_per_part(epub_bytes)
+    output = tmp_path / "book.prepare.html"
+
+    rc, stderr = _run_cli(
+        ["prepare", str(epub_path), "--output", str(output), "--max-chars", str(max_chars)]
+    )
+    assert rc == 0, f"Expected exit 0, got {rc}. Stderr: {stderr}"
+    assert not output.exists()
+
+    parts = sorted(tmp_path.glob("book.prepare.*of*.html"))
+    assert len(parts) > 1
+    n = len(parts)
+    for i, part in enumerate(parts, start=1):
+        assert part.name == f"book.prepare.{i}of{n}.html"
+
+    assert "[WARN]" in stderr
+    assert "split into" in stderr
+
+
+@pytest.mark.integration
+def test_prepare_split_guards_every_part_before_writing_any(tmp_path: pathlib.Path) -> None:
+    """Every derived part path is guarded for pre-existence before ANY part
+    is written, so a mid-split failure never leaves a partial set of
+    output files on disk (US-018/US-014 extended to the split case)."""
+    epub_bytes = _force_split_epub_bytes()
+    epub_path = tmp_path / "wide.epub"
+    epub_path.write_bytes(epub_bytes)
+    max_chars = _max_chars_forcing_two_sections_per_part(epub_bytes)
+    output = tmp_path / "book.prepare.html"
+
+    # Discovery run: find out how many parts exist and what they're named.
+    parts = _prepare_split(epub_path, output, max_chars)
+    for part in parts:
+        part.unlink()
+
+    # Pre-create only the LAST part as a pre-existing-file sentinel, then
+    # rerun without --force: the guard over ALL part paths must fire
+    # before any part is (re-)written, so the FIRST part must not appear.
+    sentinel_content = "pre-existing sentinel"
+    parts[-1].write_text(sentinel_content)
+
+    rc, stderr = _run_cli(
+        ["prepare", str(epub_path), "--output", str(output), "--max-chars", str(max_chars)]
+    )
+    assert rc == 1
+    assert "[ERROR]" in stderr
+    assert not parts[0].exists()
+    assert parts[-1].read_text() == sentinel_content
+
+
+@pytest.mark.integration
+def test_restore_accepts_multiple_translated_files_via_nargs(tmp_path: pathlib.Path) -> None:
+    """`restore` accepts all split parts as separate positional arguments
+    and reassembles a single EPUB from them."""
+    epub_bytes = _force_split_epub_bytes()
+    epub_path = tmp_path / "wide.epub"
+    epub_path.write_bytes(epub_bytes)
+    max_chars = _max_chars_forcing_two_sections_per_part(epub_bytes)
+    output = tmp_path / "book.prepare.html"
+    parts = _prepare_split(epub_path, output, max_chars)
+
+    epub_out = tmp_path / "restored.epub"
+    rc, stderr = _run_cli(
+        [
+            "restore",
+            str(epub_path),
+            *[str(p) for p in parts],
+            "--lang",
+            "pl",
+            "--output",
+            str(epub_out),
+        ]
+    )
+    assert rc == 0, f"Expected exit 0, got {rc}. Stderr: {stderr}"
+    assert epub_out.exists()
+
+
+@pytest.mark.integration
+def test_restore_rejects_duplicate_translated_file_argument(
+    synth_epub_file: pathlib.Path, tmp_path: pathlib.Path
+) -> None:
+    """Passing the same translated file twice is a user mistake, not a
+    genuine content mismatch — it must be caught up front, naming both
+    occurrences, before any parsing happens."""
+    html_out = tmp_path / "prepared.html"
+    rc, _ = _run_cli(["prepare", str(synth_epub_file), "--output", str(html_out)])
+    assert rc == 0
+
+    rc2, stderr = _run_cli(
+        ["restore", str(synth_epub_file), str(html_out), str(html_out), "--lang", "pl"]
+    )
+    assert rc2 == 1
+    assert "[ERROR]" in stderr
+    assert "Duplicate translated file argument" in stderr
+
+
+@pytest.mark.integration
+def test_prepare_default_threshold_splits_without_max_chars_flag(tmp_path: pathlib.Path) -> None:
+    """A payload exceeding DEFAULT_MAX_CHARS (900k) splits automatically even
+    when `--max-chars` is never passed -- the *default* threshold, not just
+    an explicit override, must trigger the split path (binding decision:
+    auto-split by default at ~900k chars, a 10% margin below DeepL's
+    1,000,000-char document limit, see docs/adr/0006).
+    """
+    # 2 chapters x 600k filler chars renders to ~1.2M chars total -- well
+    # over the 900k default, and splits cleanly into 2 parts (verified via
+    # a scratch measurement: single-render length 1,201,480 chars, 2 parts
+    # at the default threshold).
+    epub_bytes = _force_split_epub_bytes(n_chapters=2, filler=600_000)
+    epub_path = tmp_path / "huge.epub"
+    epub_path.write_bytes(epub_bytes)
+    output = tmp_path / "huge.prepare.html"
+
+    rc, stderr = _run_cli(["prepare", str(epub_path), "--output", str(output)])
+    assert rc == 0, f"Expected exit 0, got {rc}. Stderr: {stderr}"
+    assert not output.exists()
+
+    parts = sorted(tmp_path.glob("huge.prepare.*of*.html"))
+    assert len(parts) > 1
+    n = len(parts)
+    for i, part in enumerate(parts, start=1):
+        assert part.name == f"huge.prepare.{i}of{n}.html"
+
+    assert "[WARN]" in stderr
+    assert "split into" in stderr
+
+
+@pytest.mark.integration
+def test_restore_with_missing_split_part_fails_completeness_check(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Passing only some of the split parts to restore must fail the
+    section-vs-spine completeness gate, not silently produce a partial
+    EPUB missing chapters."""
+    epub_bytes = _force_split_epub_bytes()
+    epub_path = tmp_path / "wide.epub"
+    epub_path.write_bytes(epub_bytes)
+    max_chars = _max_chars_forcing_two_sections_per_part(epub_bytes)
+    output = tmp_path / "book.prepare.html"
+    parts = _prepare_split(epub_path, output, max_chars)
+
+    rc, stderr = _run_cli(
+        [
+            "restore",
+            str(epub_path),
+            str(parts[0]),
+            "--lang",
+            "pl",
+            "--output",
+            str(tmp_path / "bad.epub"),
+        ]
+    )
+    assert rc == 1
+    assert "[ERROR]" in stderr
+    assert not (tmp_path / "bad.epub").exists()
+
+
+@pytest.mark.integration
+def test_restore_with_missing_split_part_also_warns_about_part_markers(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Beyond the exit-1 completeness failure, a missing part must surface
+    the advisory data-parts-total WARN naming the file-count mismatch --
+    the single most likely real user mistake (forgetting a part) --
+    regression test for BLOCK cycle 1 on task #22."""
+    epub_bytes = _force_split_epub_bytes()
+    epub_path = tmp_path / "wide.epub"
+    epub_path.write_bytes(epub_bytes)
+    max_chars = _max_chars_forcing_two_sections_per_part(epub_bytes)
+    output = tmp_path / "book.prepare.html"
+    parts = _prepare_split(epub_path, output, max_chars)
+    assert len(parts) > 1, "test setup must actually force a split"
+
+    rc, stderr = _run_cli(
+        [
+            "restore",
+            str(epub_path),
+            str(parts[0]),
+            "--lang",
+            "pl",
+            "--output",
+            str(tmp_path / "bad.epub"),
+        ]
+    )
+    assert rc == 1
+    assert "[ERROR]" in stderr
+    assert "[WARN]" in stderr
+    assert "file(s) were given" in stderr

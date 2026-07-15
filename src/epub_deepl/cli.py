@@ -27,9 +27,9 @@ from epub_deepl.epub.validator import (
 )
 from epub_deepl.errors import EpubTranslationError, InternalError, UserError
 from epub_deepl.logging_setup import configure, get_logger
-from epub_deepl.merge.builder import build, count_ruby
+from epub_deepl.merge.builder import DEFAULT_MAX_CHARS, build_split, count_ruby
 from epub_deepl.restore.applier import apply_and_write
-from epub_deepl.restore.parser import parse_translated_html
+from epub_deepl.restore.parser import TranslatedDoc, merge_translated_docs, parse_translated_html
 
 _log = get_logger("cli")
 
@@ -66,6 +66,19 @@ def _make_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Overwrite output file if it already exists",
     )
+    prep.add_argument(
+        "--max-chars",
+        type=int,
+        default=DEFAULT_MAX_CHARS,
+        metavar="N",
+        help=(
+            "Split the merged HTML into multiple output files, at chapter "
+            "boundaries, once it would exceed N characters "
+            f"(default: {DEFAULT_MAX_CHARS}; DeepL's document limit is ~1,000,000 "
+            "characters). Pass 0 to disable splitting and always write a single "
+            "output file."
+        ),
+    )
 
     # restore subcommand
     res = sub.add_parser(
@@ -76,7 +89,11 @@ def _make_parser() -> argparse.ArgumentParser:
     res.add_argument(
         "translated",
         metavar="TRANSLATED.html",
-        help="Path to the translated HTML file",
+        nargs="+",
+        help=(
+            "Path(s) to the translated HTML file(s). Pass all of them, in any "
+            "order, when `prepare` split the payload into parts."
+        ),
     )
     res.add_argument(
         "--lang",
@@ -116,13 +133,35 @@ def _default_restore_output(input_path: str) -> str:
     return str(p.parent / f"{p.stem}.translated.epub")
 
 
+def _split_output_paths(output_path: str, n: int) -> list[str]:
+    """Derive per-part output paths for a split payload.
+
+    ``book.prepare.html`` with ``n=2`` → ``book.prepare.1of2.html``,
+    ``book.prepare.2of2.html``. The ``NofM`` marker is inserted before the
+    final suffix so every part keeps a recognisable extension; a
+    suffix-less path gets the marker appended instead.
+    """
+    p = pathlib.Path(output_path)
+    return [str(p.with_name(f"{p.stem}.{i}of{n}{p.suffix}")) for i in range(1, n + 1)]
+
+
 def _run_prepare(args: argparse.Namespace) -> int:
     input_path = args.input
     output_path = args.output or _default_prepare_output(input_path)
+    max_chars = args.max_chars
 
-    # US-018: output must not equal any input path
+    if max_chars < 0:
+        raise UserError(f"--max-chars must be >= 0 (0 disables splitting), got {max_chars}")
+    if max_chars > 1_000_000:
+        _log.warning(
+            "--max-chars=%d exceeds DeepL's ~1,000,000 character document "
+            "limit; the translation request may be rejected",
+            max_chars,
+        )
+
+    # US-018 / US-014: base-path guards, unconditional regardless of whether
+    # the payload ends up split into multiple files.
     check_output_not_input(output_path, input_path)
-    # US-014: fail-fast if output exists and --force not given
     check_output_not_exists(output_path, args.force)
 
     _log.info("Reading EPUB: %s", input_path)
@@ -142,21 +181,56 @@ def _run_prepare(args: argparse.Namespace) -> int:
         _log.warning("Ruby annotations detected in %d place(s)", ruby_count)
 
     _log.info("Building merged HTML...")
-    merged_html = build(epub)
+    parts = build_split(epub, max_chars)
 
-    _log.info("Writing output: %s", output_path)
-    pathlib.Path(output_path).write_text(merged_html, encoding="utf-8")
+    if len(parts) == 1:
+        _log.info("Writing output: %s", output_path)
+        pathlib.Path(output_path).write_text(parts[0], encoding="utf-8")
+        return 0
+
+    output_paths = _split_output_paths(output_path, len(parts))
+
+    # Guard every part path before writing any of them, so a mid-split
+    # failure never leaves a partial set of output files on disk.
+    for part_path in output_paths:
+        check_output_not_input(part_path, input_path)
+        check_output_not_exists(part_path, args.force)
+
+    for part_path, part_html in zip(output_paths, parts, strict=True):
+        _log.info("Writing output: %s (%d chars)", part_path, len(part_html))
+        pathlib.Path(part_path).write_text(part_html, encoding="utf-8")
+
+    _log.warning(
+        "Payload exceeded --max-chars=%d; split into %d parts: %s. "
+        "Translate each part separately in DeepL, then pass all %d "
+        "translated files to `restore`.",
+        max_chars,
+        len(parts),
+        ", ".join(output_paths),
+        len(parts),
+    )
 
     return 0
 
 
 def _run_restore(args: argparse.Namespace) -> int:
     input_path = args.input
-    translated_path = args.translated
+    translated_paths: list[str] = args.translated
     output_path = args.output or _default_restore_output(input_path)
 
+    # Duplicate-path pre-check: resolve and dedupe before anything else. The
+    # same file passed twice would otherwise surface as a confusing
+    # TranslatedHtmlMismatch ("section X appears in more than one part")
+    # instead of naming the real mistake.
+    seen: dict[pathlib.Path, str] = {}
+    for t in translated_paths:
+        resolved = pathlib.Path(t).resolve()
+        if resolved in seen:
+            raise UserError(f"Duplicate translated file argument: {seen[resolved]!r} and {t!r}")
+        seen[resolved] = t
+
     # US-018
-    check_output_not_input(output_path, input_path, translated_path)
+    check_output_not_input(output_path, input_path, *translated_paths)
     # US-014
     check_output_not_exists(output_path, args.force)
 
@@ -169,8 +243,12 @@ def _run_restore(args: argparse.Namespace) -> int:
 
     validate_epub(epub)
 
-    _log.info("Parsing translated HTML: %s", translated_path)
-    doc = parse_translated_html(translated_path)
+    docs: list[tuple[str, TranslatedDoc]] = []
+    for t in translated_paths:
+        _log.info("Parsing translated HTML: %s", t)
+        docs.append((t, parse_translated_html(t)))
+
+    doc = merge_translated_docs(docs)
 
     target_lang = _resolve_target_lang(args.lang, doc.html_lang, epub.metadata.language)
 

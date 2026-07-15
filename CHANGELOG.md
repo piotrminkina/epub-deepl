@@ -109,6 +109,25 @@ tagged.
 - **`.github/ISSUE_TEMPLATE/`** (bug + feature forms) and
   **`pull_request_template.md`** enforcing the quality-gate
   checklist.
+- **Auto-split oversized DeepL payloads.** `prepare` now measures the
+  rendered payload and, once it exceeds `--max-chars` (default
+  `900,000` — a 10% margin below DeepL's 1,000,000-character document
+  limit), packs spine sections into multiple parts at section
+  boundaries (a chapter is never split mid-section) and writes them as
+  `<stem>.<i>of<n>.html` instead of a single file. A payload that
+  already fits is unaffected: output stays byte-identical to today's
+  single-file behaviour. `--max-chars 0` disables splitting entirely.
+  Each part carries advisory `data-part`/`data-parts-total` markers on
+  `<body>`; `restore` now accepts multiple translated files
+  (`restore INPUT.epub PART1 PART2 ... --output OUT.epub`), rejects
+  duplicate file arguments up front, and reassembles one document from
+  all parts before applying the existing restore pipeline — the
+  completeness gate (spine hrefs vs. translated sections) is
+  unaffected, since the part markers are advisory-only, never
+  authoritative. A single section that alone exceeds a fresh part's
+  budget raises `OversizedSection` naming the offending chapter, with
+  remediation advice (raise `--max-chars` or split the source chapter).
+  See [ADR-0006](docs/adr/0006-auto-split-oversized-payloads.md).
 
 ### Changed
 

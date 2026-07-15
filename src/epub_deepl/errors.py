@@ -50,6 +50,10 @@ class TranslatedHtmlMismatch(ValidationError):
     """data-source-href in translated HTML doesn't match input EPUB spine."""
 
 
+class OversizedSection(UserError):
+    """A single section exceeds the per-part character budget, even alone."""
+
+
 class OutputExists(UserError):
     """Output file already exists and --force was not passed."""
 

@@ -199,6 +199,9 @@ Before producing any output, `prepare` must validate:
 - DeepL HTML document compatibility (output is HTML5 that DeepL accepts
   as a translatable document).
 - Solo-user CLI workflow with manual upload/download to DeepL.
+- Automatic splitting of payloads exceeding DeepL's per-document
+  character limit across multiple documents, packed at section
+  boundaries (see [ADR-0006](../adr/0006-auto-split-oversized-payloads.md)).
 
 ### Out of scope
 
@@ -207,8 +210,8 @@ Before producing any output, `prepare` must validate:
 - DRM-protected EPUBs — detected and rejected, never supported.
 - Automatic invocation of the DeepL API (user uploads/downloads manually).
 - Automatic invocation of `epubcheck` (manual user step).
-- Splitting books larger than DeepL's per-document character limit across
-  multiple documents.
+- Splitting a single chapter/section that alone exceeds `--max-chars`
+  (auto-split only breaks between sections, never inside one).
 - GUI, web interface, daemon mode, or multi-user features.
 - Translation memory, caching, or glossary support.
 - Ruby annotation preservation strategy (warning only; pass-through).
@@ -524,6 +527,42 @@ includes media types the tool cannot bundle (e.g. DTBook, legacy HTML).
   media-type and item href.
 - The tool does not silently skip or mis-translate such items.
 
+### US-021: Oversized payloads are split automatically at section boundaries
+
+**Description:** As the user, I want a book whose merged payload exceeds
+DeepL's per-document character limit to still translate in one workflow,
+without hand-splitting the EPUB myself.
+
+**Acceptance criteria:**
+
+- `prepare` accepts `--max-chars N` (default `900,000`, a ~10% margin
+  under DeepL's 1,000,000-character limit).
+- When the merged payload is at or under `--max-chars`, output is exactly
+  one `<stem>.prepare.html` file, byte-identical to the output produced
+  without the flag — the split mechanism never changes behavior for
+  books that already fit.
+- When the payload exceeds `--max-chars`, `prepare` instead emits
+  `<stem>.prepare.1ofN.html`, `<stem>.prepare.2ofN.html`, … packing
+  whole sections greedily in spine order; no section is ever split
+  across two parts. `prepare` exits `0` and emits one `[WARN]` listing
+  the parts written and instructing the user to translate each
+  separately.
+- `--max-chars 0` disables splitting outright — the payload emits as
+  one file regardless of size.
+- A single section that alone exceeds a fresh part's budget makes
+  `prepare` exit `1` with an error naming the offending section's href,
+  its size, and the remediation (raise `--max-chars`, or split that
+  chapter in the source EPUB) — this is the only case not handled by
+  the automatic path.
+- `restore` accepts one or more translated files (`nargs="+"`) in any
+  order; passing every part of a split payload merges them back into a
+  single logical document before the usual per-section rebuild. Order
+  never matters because sections are re-associated by their
+  `data-source-href`, not by file position.
+- If a required section is missing from the combined set of translated
+  files, `restore` exits `1` naming the missing section(s), identical to
+  today's single-file behavior.
+
 ---
 
 ## 6. Success Metrics
@@ -534,7 +573,7 @@ includes media types the tool cannot bundle (e.g. DTBook, legacy HTML).
 | SM-2 | Translation completeness | 100% of translatable fields | Manual inspection: every `<dc:title>`, `<dc:description>`, `<dc:subject>`, chapter heading, paragraph, `alt`/`title`/`aria-label` is in the target language after DeepL round-trip |
 | SM-3 | TOC ↔ heading consistency | Byte-equal after whitespace normalization | For each `<navLabel><text>`, the value equals the resolved target element's normalized text content |
 | SM-4 | EPUB validity | Output passes `epubcheck` | Run `epubcheck` on all 4 test books after round-trip-without-translation; no errors |
-| SM-5 | Translation-job economy | 1 DeepL document per book | One translator upload per book regardless of plan. Under DeepL Pro Starter's 5-documents-per-month limit, that means roughly 5 books/month — vs ~1 book per month under per-XHTML translation. |
+| SM-5 | Translation-job economy | `ceil(payload / 900,000)` DeepL documents per book (1 for the vast majority) | One translator upload per book for payloads at or under the 900k default; oversized books auto-split into the minimum number of parts needed. Under DeepL Pro Starter's 5-documents-per-month limit, a 1-document book allows roughly 5 books/month — vs ~1 book per month under per-XHTML translation; a split book proportionally trades slot count for still-automatic reassembly. |
 | SM-6 | CLI turnaround | < 60 s combined `prepare` + `restore` per book | Wall-clock measurement on the largest book in the test corpus |
 | SM-7 | R-8 regression coverage | Adversarial fixture exists and passes | Automated test simulates DeepL stripping `data-*` attributes, reordering attributes, and collapsing whitespace; restore must either succeed or fail with a precise diagnostic (not crash, not corrupt output) |
 
@@ -545,7 +584,7 @@ includes media types the tool cannot bundle (e.g. DTBook, legacy HTML).
 | ID | Risk | Probability | Impact | Mitigation |
 |---|---|---|---|---|
 | R-1 | DeepL modifies HTML structure unexpectedly (whitespace in `<pre>`, entity collapse, comment rewriting) | Medium | High | Restore uses lxml tolerant parsing; locate sections by `data-source-href`, not document offset; do not require byte-equality for translated content |
-| R-2 | Large EPUBs exceed DeepL's per-document character limit | Low (novels), Medium (technical books) | Medium | Documented as known limitation; user falls back to per-chapter translation or `bilingual_book_maker` for oversized books |
+| R-2 | Large EPUBs exceed DeepL's per-document character limit | Low (novels), Medium (technical books) | Medium | Auto-split at section boundaries above `--max-chars` (default 900k), with order-independent multi-file `restore`; see [ADR-0006](../adr/0006-auto-split-oversized-payloads.md). Only a single section exceeding a part's budget remains unmitigated (user raises `--max-chars` or splits that chapter in the source EPUB). |
 | R-3 | NCX with deep nested `<navPoint>` hierarchy (textbooks) | Medium | Low | Recursive anchor resolution; explicit test against a deeply-nested book |
 | R-4 | ID collisions across XHTML files cause wrong anchor resolution | Medium | Medium | Anchor resolution is scoped per-file via `data-source-href` mapping, never globally |
 | R-5 | EPUB 2 XHTML 1.1 stricter than HTML5 (DeepL output may not validate as XHTML 1.1) | High | Medium | Restore re-serializes via lxml in XHTML mode; explicit XML declaration; HTML entities normalized to XML-safe forms |
@@ -569,9 +608,12 @@ includes media types the tool cannot bundle (e.g. DTBook, legacy HTML).
   general-purpose bit flags; everything else DEFLATED.
 - **TC-5: Merged HTML format.** Valid HTML5, UTF-8, self-contained (no
   external CSS / image references in the merged file — DeepL processes
-  the document in isolation). File size below DeepL's HTML per-document
-  limit (verify against current DeepL documentation; declared in the
-  region of 1 MB for HTML at the time of writing).
+  the document in isolation). Character count below DeepL's
+  1,000,000-character per-document limit is enforced automatically:
+  `prepare` packs sections into multiple part files at a configurable
+  `--max-chars` threshold (default 900,000, a ~10% margin) rather than
+  relying on the merged file staying under the limit by chance — see
+  [ADR-0006](../adr/0006-auto-split-oversized-payloads.md).
 - **TC-6: Execution environment.** A devcontainer (per user direction)
   provides the development and test environment. Base image is a generic
   distribution (no predefined VS Code UID 1000 user); all tooling

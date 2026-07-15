@@ -200,14 +200,24 @@ abstractions before a second implementation exists would be premature.
 ### 4.1 Sequence
 
 ```
-1. cli.parse_args()                          → PrepareArgs(input_path, output_path, force, verbose)
-2. validator.check_output_exists(...)        → raise OutputExists if exists and not force
-3. reader.read_epub(input_path)              → Epub
-4. validator.validate_epub(epub)             → raise on any FR-4 failure
-5. ruby_count = builder.count_ruby(epub)     → emit WARN if > 0
-6. merged_html = builder.build(epub)         → str
-7. write merged_html to output_path
-8. exit 0
+1. cli.parse_args()                          → PrepareArgs(input_path, output_path, force,
+                                                 verbose, max_chars=DEFAULT_MAX_CHARS)
+                                                 max_chars < 0 → UserError; > 1_000_000 → WARN
+2. reader.read_epub(input_path)              → Epub
+3. validator.validate_epub(epub)             → raise on any FR-4 failure
+4. ruby_count = builder.count_ruby(epub)     → emit WARN if > 0
+5. parts = builder.build_split(epub, max_chars) → list[str]; len == 1 unless the payload
+                                                 exceeds max_chars (§4.3a)
+6. output_paths = _split_output_paths(output_path, len(parts))
+                                                → [output_path] unchanged when len(parts) == 1;
+                                                  otherwise book.prepare.1ofN.html, … (§4.3a)
+7. validator.check_output_exists(...)        → raise OutputExists if exists and not force,
+                                                 checked for EVERY path in output_paths
+                                                 BEFORE any file is written
+8. write each part to its output_paths entry → INFO per file with its char count
+9. if len(parts) > 1: emit one [WARN] listing the parts written, instructing the user to
+   translate every part separately and pass all of them to `restore`
+10. exit 0
 ```
 
 ### 4.2 `reader.read_epub` — parsing rules
@@ -343,6 +353,75 @@ Notes:
   swapped for the marked variant instead, so the nav document is never
   translated twice.
 
+### 4.3a Payload plan and splitting (`build_split`)
+
+`build(epub)` is internally `_render_single(_build_plan(epub))` — an
+extraction, not a behavior change: output stays byte-identical to
+before this feature.
+
+```python
+@dataclass
+class _PayloadSection:
+    href: str
+    html: str                      # the <section ...>...</section> markup, incl. header
+
+@dataclass
+class _PayloadPlan:
+    envelope_open: str              # <!DOCTYPE html><html lang="…">...<body>
+    preamble: str                   # OPF metadata header + NCX block (part 1 only)
+    sections: list[_PayloadSection] # non-spine nav-doc first, then spine order
+    envelope_close: str              # </body></html>
+
+def _build_plan(epub: Epub) -> _PayloadPlan: ...
+def _render_single(plan: _PayloadPlan) -> str: ...
+def _body_open(part: tuple[int, int] | None) -> str:
+    # part=None                → "<body>" (today's single-file shape, byte-identical)
+    # part=(i, n) and n >= 1   → '<body data-part="{i}" data-parts-total="{n}">' when n >= 2,
+    #                            else "<body>" — markers appear ONLY when a split occurs
+```
+
+`build_split(epub, max_chars=DEFAULT_MAX_CHARS) -> list[str]` packs
+`plan.sections` into one or more rendered documents:
+
+- `DEFAULT_MAX_CHARS = 900_000` — a ~10% margin under DeepL's
+  1,000,000-character document limit. `_PART_MARKER_RESERVE = 64`
+  chars reserved per part for the `data-part`/`data-parts-total`
+  attribute text so a part's rendered size never creeps past
+  `max_chars` once markers are added.
+- Short-circuit to `[_render_single(plan)]` (today's exact output) when
+  `max_chars <= 0`, or the single-render output already fits, or the
+  plan has no sections at all.
+- Otherwise, pack greedily in `plan.sections` order (spine order, with
+  a non-spine nav-doc section first, matching §4.3): a part's budget is
+  `max_chars − len(envelope_open) − len(envelope_close) −
+  _PART_MARKER_RESERVE`, minus `len(preamble)` for part 1 only — every
+  later part starts fresh with no preamble. Sections are appended to the
+  current part while they fit; a section that doesn't fit starts a new
+  part.
+- If a single section alone exceeds a **fresh** part's budget, raise
+  `OversizedSection` (`errors.py`) naming the section's `href`, its
+  character size, and the remediation (raise `--max-chars`, or split
+  that chapter in the source EPUB before running `prepare`). This is
+  the one case `build_split` cannot resolve automatically.
+- Every returned part is a complete, self-contained HTML5 document:
+  full `envelope_open`/`envelope_close`, and — critically — the same
+  `<html lang>` as the single-file case, so ADR-0002's language
+  auto-detection works from any individual part. `data-part="i"
+  data-parts-total="n"` is added to `<body>` only when `n >= 2`; a
+  single-part result (whether via short-circuit or because everything
+  happened to fit in one pack) carries no markers and is
+  indistinguishable from today's `<body>`.
+- Defensive post-check: if any rendered part's length still exceeds
+  `max_chars` (an arithmetic bug in the reserve/budget accounting,
+  never a user-facing condition), raise `InternalError` rather than
+  silently emitting an oversized file.
+
+`_split_output_paths(output_path, n)` derives the per-part filenames:
+`n == 1` returns `[output_path]` unchanged; `n > 1` inserts
+`.{i}of{n}` before the final suffix (`book.prepare.html` →
+`book.prepare.1of2.html`, `book.prepare.2of2.html`), handling
+suffix-less paths safely.
+
 ---
 
 ## 5. Restore Flow
@@ -350,20 +429,31 @@ Notes:
 ### 5.1 Sequence
 
 ```
-1. cli.parse_args()                             → RestoreArgs(input_epub, html, lang|None, output, force)
-2. validator.check_output_exists(...)
-3. reader.read_epub(input_epub)                 → Epub (used as template)
-4. parser.parse_translated_html(html_path)      → TranslatedDoc (incl. html_lang)
-5. cli._resolve_target_lang(args.lang, doc.html_lang, epub.metadata.language)
+1. cli.parse_args()                             → RestoreArgs(input_epub, translated: list[Path]
+                                                     (nargs="+"), lang|None, output, force)
+2. pre-check: reject duplicate resolved paths in `translated`      → UserError
+3. validator.check_output_not_input(output, input_epub, *translated) → UserError on collision
+4. validator.check_output_exists(...)
+5. reader.read_epub(input_epub)                 → Epub (used as template)
+6. for each path in translated:
+     parser.parse_translated_html(path)         → TranslatedDoc (incl. html_lang,
+                                                    part_index, parts_total — §5.2)
+7. doc = parser.merge_translated_docs(           → single logical TranslatedDoc (§5.2a);
+          [(path, parsed_doc), ...])               a single-file input passes through unchanged
+8. cli._resolve_target_lang(args.lang, doc.html_lang, epub.metadata.language)
                                                 → target_lang (per US-009; §5.1a)
-6. validator.validate_translated(epub, doc)     → raise TranslatedHtmlMismatch if mismatch
-7. applier.apply(epub, doc, target_lang)        → updates epub.metadata, epub.ncx,
+9. validator.validate_translated(epub, doc)     → raise TranslatedHtmlMismatch if mismatch
+10. applier.apply(epub, doc, target_lang)       → updates epub.metadata, epub.ncx,
                                                   epub.xhtmls in place; returns
                                                   new_nav_doc_bytes: bytes | None
-8. writer.write_epub(epub, output_path,
+11. writer.write_epub(epub, output_path,
                       new_nav_doc_bytes=...)     → ZIP with mimetype-first STORED
-9. exit 0
+12. exit 0
 ```
+
+Steps 9 onward are unchanged from the single-file flow — `merge_translated_docs`
+produces the same `TranslatedDoc` shape the validator/applier/writer already
+consume, so multi-part support required no changes downstream of step 7.
 
 ### 5.1a Target language resolution (US-009)
 
@@ -416,6 +506,8 @@ class TranslatedDoc:
     ncx_doctitle: str
     nav_labels: dict[str, str]              # data-ncx-id → translated label
     sections: dict[str, str]                # data-source-href → translated body HTML
+    part_index: int | None = None           # advisory: data-part on <body>, tolerant int parse
+    parts_total: int | None = None          # advisory: data-parts-total on <body>
 ```
 
 Selection rules (XPath, namespace-agnostic on HTML5 input):
@@ -426,6 +518,44 @@ Selection rules (XPath, namespace-agnostic on HTML5 input):
 - NCX doctitle: `//nav[@data-source='ncx']//*[@data-ncx='doctitle']/text()`
 - NCX labels: `//nav[@data-source='ncx']//li[@data-ncx-id]`
 - Sections: `//section[@data-source-href]`
+- Part markers: `//body/@data-part`, `//body/@data-parts-total` — parsed
+  tolerantly as `int`; absent or non-numeric values become `None` rather
+  than raising, since the markers are advisory only (§4.3a).
+
+### 5.2a `parser.merge_translated_docs` — combining split payloads
+
+```python
+def merge_translated_docs(docs: list[tuple[Path, TranslatedDoc]]) -> TranslatedDoc: ...
+```
+
+Combines one `TranslatedDoc` per translated file (in whatever order the
+user passed them to `restore`) into the single logical document the rest
+of the pipeline expects:
+
+- **Single input:** returned unchanged, silently — no merge bookkeeping
+  or logging for the common case.
+- **Sections:** unioned by `data-source-href` across all inputs. A
+  duplicate href appearing in two different files raises
+  `TranslatedHtmlMismatch`, naming the href and both file paths — this
+  is a hard error because it means the same section is ambiguous, not
+  merely redundant.
+- **Metadata (`titles`/`descriptions`/`subjects`) and `ncx_doctitle`/
+  `nav_labels`:** these live in the shared preamble emitted by
+  `build_split` on part 1 only (§4.3a), so the first input that carries
+  a non-empty value wins wholesale; every other input that *also*
+  carries a non-empty value logs a `WARN` (translation duplicated data
+  that should have been part-1-only, e.g. a hand-edited file) but does
+  not raise.
+- **`html_lang`:** first non-`None` value across the inputs wins; if two
+  inputs disagree, `WARN`s and recommends passing `--lang` explicitly
+  rather than relying on auto-detection.
+- **Part markers (`part_index`/`parts_total`):** sanity-checked only —
+  totals that disagree across files, a `parts_total` that doesn't match
+  the number of files passed, or gaps in the `part_index` sequence each
+  produce a `WARN`, never a raise (the markers are advisory, per
+  §4.3a); markers entirely absent from every input merge silently, with
+  no warning at all.
+- Logs via a dedicated module logger, `get_logger("restore.parser")`.
 
 ### 5.3 `applier.apply`
 

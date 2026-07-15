@@ -126,20 +126,20 @@ stories, but every criterion must be explicitly asserted somewhere.
 | US | Test module | Test function(s) | Layer |
 |---|---|---|---|
 | US-001 | `integration/test_cli.py` | `test_prepare_emits_html_file`, `test_prepare_html_has_section_per_spine_item`, `test_prepare_html_head_contains_title_and_description`, `test_prepare_html_nav_block_carries_ncx_data` | Integration (synth) |
-| US-002 | `integration/test_cli.py` | `test_restore_emits_epub_file`, `test_restored_body_replaces_input_body`, `test_restored_opf_has_translated_metadata`, `test_restored_zip_mimetype_first_stored` | Integration (synth) |
+| US-002 | `integration/test_cli.py`, `integration/test_roundtrip.py` | `test_restore_emits_epub_file`, `test_simulated_translation_completeness` (translated metadata lands in output OPF), `test_roundtrip_zip_invariants_synth` (mimetype-first ZIP) | Integration (synth) |
 | US-003 | `unit/test_validator.py` | `test_validate_rejects_drm_protected_epub` | Unit |
 | US-004 | `unit/test_validator.py` | `test_validate_rejects_manifest_with_missing_file`, `test_validate_lists_all_missing_files` | Unit |
 | US-005 | `unit/test_validator.py` | `test_validate_rejects_spine_with_unresolved_idref` | Unit |
 | US-006 | `integration/test_roundtrip.py` | `test_roundtrip_without_translation_is_content_identical[corpus]` (parametrized across the corpus directory), `test_roundtrip_without_translation_synth_minimal`, `test_roundtrip_without_translation_synth_with_nested_ncx`, `test_roundtrip_without_translation_synth_with_mathml` | Integration (synth + corpus) |
-| US-007 | `integration/test_cli.py` | `test_restored_opf_has_translated_metadata` (shared with US-002), `test_restored_metadata_subject_count_preserved` | Integration |
+| US-007 | `integration/test_roundtrip.py` | `test_simulated_translation_completeness` (shared with US-002) | Integration |
 | US-008 | `unit/test_anchor_resolution.py` | `test_resolve_label_with_fragment`, `test_resolve_label_without_fragment_uses_first_heading`, `test_resolve_label_no_fragment_no_heading_falls_back_to_flat_label`, `test_resolve_label_per_file_scoping_prevents_id_collisions`, `test_resolve_label_normalizes_whitespace` | Unit |
 | US-009 | `unit/test_opf.py` | `test_opf_set_language_replaces_first_dc_language`, `test_opf_set_language_removes_extras_when_multiple_present` | Unit |
 | US-010 | `unit/test_opf.py` | `test_opf_preserves_non_translated_fields_byte_identical[creator]`, `test_opf_preserves_non_translated_fields_byte_identical[publisher]`, `test_opf_preserves_non_translated_fields_byte_identical[identifier]`, `test_opf_preserves_non_translated_fields_byte_identical[date]`, `test_opf_preserves_non_translated_fields_byte_identical[rights]`, `test_opf_preserves_opf_namespaced_attributes` | Unit |
-| US-011 | `integration/test_roundtrip.py` | `test_mathml_receives_translate_no_in_prepare`, `test_mathml_byte_identical_after_restore` | Integration (synth) |
+| US-011 | `integration/test_roundtrip.py` | `test_mathml_receives_translate_no_in_prepare`, `test_roundtrip_without_translation_synth_with_mathml` | Integration (synth) |
 | US-012 | `integration/test_cli.py` | `test_ruby_annotations_emit_warning_to_stderr`, `test_ruby_does_not_affect_exit_code` | Integration (synth) |
-| US-013 | `integration/test_roundtrip.py` | `test_manifest_element_byte_identical_after_roundtrip`, `test_spine_element_byte_identical_after_roundtrip` | Integration |
+| US-013 | `integration/test_roundtrip.py` | `test_manifest_element_canonical_xml_identical_after_roundtrip`, `test_spine_element_canonical_xml_identical_after_roundtrip` | Integration |
 | US-014 | `integration/test_cli.py` | `test_default_output_naming_prepare`, `test_default_output_naming_restore`, `test_output_flag_overrides_default`, `test_existing_output_without_force_fails_fast`, `test_existing_output_with_force_overwrites` | Integration (CLI) |
-| US-015 | `integration/test_cli.py` | `test_no_args_shows_usage_with_both_subcommands`, `test_prepare_help_lists_all_flags`, `test_restore_help_lists_all_flags` | Integration (CLI) |
+| US-015 | `integration/test_cli.py` | `test_no_args_shows_usage_with_both_subcommands` | Integration (CLI) |
 | US-016 | `integration/test_roundtrip.py` | (verified manually — documented test recipe) | Manual |
 | US-017 | N/A | (PRD compliance only; no functional test) | N/A |
 
@@ -151,7 +151,7 @@ stories, but every criterion must be explicitly asserted somewhere.
 |---|---|---|---|
 | SM-1 | Round-trip integrity (no translation) on full corpus | Yes | `test_roundtrip_without_translation_is_content_identical[corpus]` |
 | SM-2 | Translation completeness | Partial; structural integrity automated, translation completeness verified by `simulated_translation` fixture (deterministic regex replacement) and manual sampling on real DeepL output | `test_simulated_translation_completeness` |
-| SM-3 | TOC ↔ heading consistency (byte-equal, normalized whitespace) | Yes | `test_navlabel_matches_heading_text_after_simulated_translation` |
+| SM-3 | TOC ↔ heading consistency (byte-equal, normalized whitespace) | Partial; unit-tested for the base NCX case (`test_anchor_resolution.py`'s `resolve_label` tests), integration-tested only for EPUB 3 nav-doc | `test_epub3_nav_labels_consistent_with_ncx_after_translation`, `test_epub3_nav_toc_entry_keeps_translated_label_when_anchor_unresolvable` — see §7.2 Known gap |
 | SM-4 | EPUB validity via `epubcheck` | Automated (`@pytest.mark.epubcheck`) + manual recipe in CONTRIBUTING | CI job exercises the marker against synthetic fixtures |
 | SM-5 | DeepL quota economy (1 doc per book) | Manual | Documented as user-observable property; no test |
 | SM-6 | CLI turnaround < 60 s | Yes | `test_cli_turnaround_per_book[corpus]` with `pytest-benchmark` or simple `time.monotonic()` wrapper |
@@ -371,6 +371,117 @@ silently to EPUB 2.0 handling).
 - `test_reader_detects_nav_doc_in_spine`
 - `test_reader_detects_nav_doc_not_in_spine`
 
+### 6.11 `tests/unit/test_payload_split.py`
+
+Covers `merge/builder.py`'s `_PayloadPlan`/`_build_plan`/`build_split` (§4.3a) —
+the packing algorithm that keeps every part under `--max-chars` while never
+splitting inside a section. Two blocks: plan-identity tests pinning the
+WP1 refactor (`build()` now composes as `_render_single(_build_plan(epub))`),
+then `build_split`'s passthrough/packing/error-path tests.
+
+**Plan identity (WP1 refactor pin)**
+
+- `test_build_matches_assembled_plan_parts_epub2_default`
+  (EPUB 2 default fixture: `build()` equals the plan's own parts —
+  `envelope_open` + `preamble` + section htmls + `envelope_close` —
+  reassembled by hand, bypassing `_render_single` entirely)
+- `test_build_matches_assembled_plan_parts_epub3_both_navs` (same, EPUB 3
+  fixture with both NCX and a non-spine nav doc present)
+- `test_build_matches_assembled_plan_parts_nav_in_spine` (same, EPUB 3
+  fixture where the nav doc is itself a spine item)
+- `test_render_single_of_build_plan_equals_build` (parametrized over the
+  EPUB 2 and EPUB 3 fixtures: `_render_single(_build_plan(e)) == build(e)`
+  holds trivially by construction)
+
+**`build_split`: passthrough cases**
+
+- `test_build_split_disabled_returns_single_identical_to_build`
+  (parametrized `max_chars` in `[0, -1, -100]`: disabled → byte-identical
+  single-file output, exactly as today)
+- `test_build_split_default_max_chars_fits_as_single` (a payload already
+  under the default budget stays single, byte-identical)
+- `test_build_split_exact_boundary_equal_to_max_chars_stays_single`
+  (`len(single) == max_chars` must still take the single-file path — the
+  packing check is `<=`, not `<`)
+
+**`build_split`: forced multi-part splitting**
+
+- `test_build_split_forces_multiple_parts_within_budget` (a small enough
+  `max_chars` forces more than one part, and every returned part stays
+  within that budget)
+- `test_build_split_preserves_section_order_without_loss_or_duplication`
+  *(critical — every section appears in exactly one part, in original
+  spine order; packing must never drop, duplicate, or reorder a section)*
+- `test_build_split_parts_carry_correct_data_part_markers` (each part's
+  `<body>` carries `data-part="i" data-parts-total="n"` matching its
+  1-based position)
+- `test_build_split_single_part_has_no_part_markers` (a single-part
+  result reproduces the historical unmarked `<body>\n` — no `data-part`
+  attribute at all)
+- `test_build_split_preamble_appears_only_in_first_part` (the OPF-metadata
+  header + NCX nav block belong to part 1 only; later parts must not
+  repeat them)
+
+**`build_split`: `OversizedSection`**
+
+- `test_build_split_oversized_section_raises_naming_href` (a section
+  alone larger than a fresh part's budget raises `OversizedSection`
+  naming the offending href, with `--max-chars` remediation advice in
+  the message)
+
+**`build_split`: defensive post-check**
+
+- `test_build_split_internal_error_when_marker_reserve_insufficient`
+  (packing-bug guard, not a reachable user-facing scenario under the real
+  `_PART_MARKER_RESERVE=64`: monkeypatches the reserve down to `0` so a
+  packed part's actual rendered length — including `data-part`/
+  `data-parts-total` marker overhead — exceeds `--max-chars` despite
+  fitting the section-only budget; `build_split` raises `InternalError`
+  rather than silently emitting an oversized part. Regression test added
+  during BLOCK cycle 1 on task #22.)
+
+### 6.12 `tests/unit/test_merge_translated_docs.py`
+
+Covers `restore/parser.py`'s `merge_translated_docs` (§5.2a), driven directly
+via `TranslatedDoc` construction (not `parse_translated_html_bytes` — these
+are unit tests of the merge function itself).
+
+- `test_single_doc_passes_through_unchanged_and_silent` (identity: single
+  doc returned as-is, no log records)
+- `test_single_doc_without_any_part_markers_stays_silent` (regression test,
+  BLOCK cycle 1 on task #22: pins that the new WARN-on-marker-mismatch
+  behavior below does not regress the far more common case — an ordinary,
+  never-split payload restored from exactly one file, carrying no part
+  markers at all — which must remain silent)
+- `test_single_doc_with_mismatching_parts_total_warns` (regression test,
+  BLOCK cycle 1 on task #22: a lone file whose own `data-parts-total`
+  disagrees with the single-file count it was given to restore — e.g. the
+  user forgot a part — must still surface the advisory WARN. The
+  `len(docs) == 1` fast path previously returned before the part-marker
+  check ran at all, so the single most likely real user mistake silently
+  degraded to the generic completeness error with no specific diagnostic.)
+- `test_multiple_docs_union_sections_across_parts`
+- `test_duplicate_href_across_parts_raises_translated_html_mismatch`
+  (message names the href and both file paths)
+- `test_metadata_field_first_carrier_wins_and_extra_carrier_warns`
+  (parametrized over `titles`/`descriptions`/`subjects`)
+- `test_metadata_field_absent_from_all_parts_stays_empty` (no carrier at
+  all → empty, silent)
+- `test_ncx_block_first_carrier_wins_and_extra_carrier_warns` (doctitle +
+  nav labels together)
+- `test_html_lang_first_non_none_wins_and_conflict_warns` (WARN message
+  recommends explicit `--lang`)
+- `test_html_lang_only_second_doc_sets_it_silently` (first doc has no
+  `html_lang` — no conflict, no warning)
+- `test_part_markers_agreeing_totals_and_contiguous_indices_no_warning`
+- `test_part_markers_disagreeing_totals_warns_but_does_not_raise`
+- `test_part_markers_total_mismatching_file_count_warns` (both parts
+  agree on `parts_total=3` but only two files were given to restore)
+- `test_part_markers_noncontiguous_indices_warns` (a gap in the
+  `data-part` sequence — 1, 3, missing 2)
+- `test_part_markers_absent_from_every_part_is_silent` (markers are
+  purely advisory; their total absence is not itself a warning)
+
 ---
 
 ## 7. Integration Test Specifications
@@ -381,9 +492,11 @@ Uses subprocess invocation (`python -m epub_deepl ...`) or
 the `cli.main()` entry point with captured `sys.argv` — preferred for
 faster runs.
 
-- `test_no_args_shows_usage_with_both_subcommands`
-- `test_prepare_help_lists_all_flags`
-- `test_restore_help_lists_all_flags`
+- `test_no_args_shows_usage_with_both_subcommands` (checks `--help` can be
+  invoked without crashing; does not assert its content)
+- Known gap: no test asserts that `prepare --help` / `restore --help`
+  actually lists every flag each subcommand defines — only the
+  doesn't-crash behaviour above is covered.
 - `test_prepare_emits_html_file`
 - `test_prepare_html_has_section_per_spine_item`
 - `test_prepare_html_head_contains_title_and_description`
@@ -393,6 +506,15 @@ faster runs.
 - `test_prepare_exit_code_1_on_missing_file`
 - `test_prepare_writes_no_output_on_validation_failure`
 - `test_restore_emits_epub_file`
+- Known gap: no integration-level test asserts that translated body
+  content (as distinct from the original) actually lands in the
+  restored EPUB's XHTML bodies — `test_restore_emits_epub_file` only
+  checks the process exit code and that the output file exists.
+  Coverage of the underlying mechanism is unit-level only:
+  `replace_body_content` (`unit/test_xhtml.py`,
+  `test_replace_body_injects_translated_content` and siblings) and NCX
+  rebuild (`unit/test_nav.py`,
+  `test_rebuild_replaces_body_and_applies_labels`).
 - `test_restore_exit_code_0_on_success`
 - `test_restore_exit_code_1_on_translated_html_mismatch`
 - `test_default_output_naming_prepare`
@@ -402,7 +524,10 @@ faster runs.
 - `test_existing_output_with_force_overwrites`
 - `test_ruby_annotations_emit_warning_to_stderr`
 - `test_ruby_does_not_affect_exit_code`
-- `test_verbose_flag_emits_per_file_progress`
+- Known gap: `--verbose` is exercised only incidentally, by
+  `test_lang_auto_detected_from_translated_html` (to surface one specific
+  log line); no test asserts that `--verbose` emits per-file progress
+  output specifically.
 - `test_no_output_on_stdout_in_normal_run`
 - **US-009 lang resolution:**
   - `test_lang_auto_detected_from_translated_html`
@@ -413,6 +538,38 @@ faster runs.
   - `test_lang_malformed_explicit_flag_rejected`
   - `test_lang_drift_warning_when_primary_subtag_unchanged` (source `en`, target `en-GB` → WARN)
   - `test_lang_no_drift_warning_when_primary_subtag_changes` (source `en`, target `pl` → silent)
+- **Auto-split (§4.3a/§5.2a):**
+  - `test_prepare_max_chars_negative_rejected` (`--max-chars must be >= 0`,
+    exit 1)
+  - `test_prepare_max_chars_above_one_million_warns_but_succeeds`
+    (a `--max-chars` above DeepL's own document limit still runs — the
+    user's call — but WARNs that the resulting request may be rejected)
+  - `test_prepare_splits_into_named_parts_when_payload_exceeds_max_chars`
+    (a payload forced over `--max-chars` is written as `NofM`-named parts,
+    never as the base output path, with one `[WARN]` summarising the split)
+  - `test_prepare_split_guards_every_part_before_writing_any` (every
+    derived part path is guarded for pre-existence before ANY part is
+    written, so a mid-split failure never leaves a partial set of files
+    on disk — US-018/US-014 extended to the split case)
+  - `test_restore_accepts_multiple_translated_files_via_nargs` (`restore`
+    accepts all split parts as separate positional arguments and
+    reassembles a single EPUB from them)
+  - `test_restore_rejects_duplicate_translated_file_argument` (the same
+    translated file passed twice is caught up front, naming both
+    occurrences, before any parsing happens)
+  - `test_prepare_default_threshold_splits_without_max_chars_flag` (a
+    payload exceeding `DEFAULT_MAX_CHARS` — 900k — splits automatically
+    even when `--max-chars` is never passed; the *default* threshold, not
+    just an explicit override, triggers the split path)
+  - `test_restore_with_missing_split_part_fails_completeness_check`
+    (passing only some of the split parts fails the section-vs-spine
+    completeness gate rather than silently producing a partial EPUB)
+  - `test_restore_with_missing_split_part_also_warns_about_part_markers`
+    (CLI-level regression test, BLOCK cycle 1 on task #22: beyond the
+    exit-1 completeness failure, a missing part must also surface the
+    advisory `data-parts-total` WARN naming the file-count mismatch — the
+    single most likely real user mistake — on stderr alongside the
+    `[ERROR]`)
 
 ### 7.2 `tests/integration/test_roundtrip.py`
 
@@ -420,53 +577,148 @@ faster runs.
 - `test_roundtrip_without_translation_synth_with_nested_ncx`
 - `test_roundtrip_without_translation_synth_with_mathml`
 - `test_roundtrip_without_translation_synth_with_ruby`
-- `test_roundtrip_without_translation_synth_with_extension_namespaces`
+- Known gap: no synth fixture or test carries an EPUB with custom XML
+  namespace extensions (vendor attributes/elements beyond `dc:`/`opf:`)
+  through the full roundtrip pipeline — `build_minimal_epub` has no
+  parameter for this. The closest existing coverage,
+  `test_parse_preserves_opf_namespaced_meta_extensions` (unit,
+  `test_opf.py`), is a narrower check that a Calibre/Apple custom
+  `<meta>` element survives OPF parse-rebuild, not a roundtrip-level
+  namespace-extension test.
 - `test_roundtrip_without_translation_is_content_identical[corpus]`
   *(parametrized over `tests/corpus/*.epub`)*
 - `test_zip_packaging_invariants_hold_after_roundtrip[corpus]`
   *(critical — closes C-1: asserts mimetype-first, STORED, flag_bits=0,
    no extras, DEFLATED tail, on every roundtrip output)*
-- `test_simulated_translation_completeness[corpus]`
-- `test_navlabel_matches_heading_text_after_simulated_translation[corpus]`
-- `test_manifest_element_canonical_xml_identical_after_roundtrip[corpus]`
-- `test_spine_element_canonical_xml_identical_after_roundtrip[corpus]`
+- `test_simulated_translation_completeness`
+- `test_manifest_element_canonical_xml_identical_after_roundtrip`
+- `test_spine_element_canonical_xml_identical_after_roundtrip`
+- Known gap: no test asserts that an NCX navLabel's text byte-equals
+  (normalized whitespace) its corresponding chapter heading's
+  (translated) text in the plain EPUB 2 / NCX-only case. The closest
+  automated coverage is unit-level
+  (`unit/test_anchor_resolution.py`'s `resolve_label` tests) plus two
+  EPUB 3 nav-doc integration tests below —
+  `test_epub3_nav_labels_consistent_with_ncx_after_translation` (asserts
+  NCX navLabel text equals nav-doc toc label text) and
+  `test_epub3_nav_toc_entry_keeps_translated_label_when_anchor_unresolvable`
+  (asserts a resolved entry's label equals the translated heading text
+  directly) — neither is a base-case (non-EPUB3) integration test of
+  heading-to-label consistency.
 - `test_mathml_receives_translate_no_in_prepare`
-- `test_mathml_canonical_xml_identical_after_restore`
+- Known gap: MathML fidelity after restore is checked only by a loose
+  content-presence assertion (`"math" in xhtml_content.lower()`, in
+  `test_roundtrip_without_translation_synth_with_mathml`), not by a
+  canonical-XML or byte-identical comparison of the `<math>` subtree
+  specifically.
 - `test_cli_turnaround_per_book[corpus]` *(SM-6)*
 - `test_restored_opf_dc_language_set_to_target`
 - `test_restored_opf_language_und_fallback_when_missing` *(US-019)*
-- `test_restored_metadata_subject_count_preserved`
+- Known gap: no test asserts the exact *count* of `dc:subject` elements
+  survives restore. `test_roundtrip_preserves_non_ascii_content_end_to_end`
+  checks that each expected subject string is present as a UTF-8 fragment,
+  but a translator response that dropped or duplicated a subject entry
+  would not be caught by it.
 - `test_input_equals_output_path_rejected[prepare]` *(US-018)*
 - `test_input_equals_output_path_rejected[restore]` *(US-018)*
 - `test_input_equals_output_path_force_does_not_bypass` *(US-018)*
 - `test_non_xhtml_spine_item_rejected` *(US-020)*
 - `test_adversarial_translation_strips_data_attribute_surfaces_precise_error` *(SM-7)*
-- `test_adversarial_translation_collapses_pre_whitespace_either_succeeds_or_fails_precisely` *(SM-7)*
 - `test_adversarial_translation_attribute_reorder_still_succeeds` *(SM-7)*
+  (isolates the attribute-reorder transform alone, via a local `_swap_attrs`
+  helper)
 - `test_adversarial_translation_random_seeded_combinations[seeds]` *(SM-7)*
+  (drives the shared `_adversarial_translation` helper — comment stripping,
+  attribute reorder, whitespace collapsing, entity re-encoding, combined —
+  across 5 seeds; this is the only coverage for whitespace collapsing,
+  exercised jointly with the other transforms rather than in isolation)
+- **Auto-split (§4.3a/§5.2a):**
+  - `test_split_roundtrip_preserves_content_losslessly` (`build_split` +
+    `merge_translated_docs` + apply produces the same zip-invariant,
+    content-complete EPUB as the unsplit path — splitting is purely a
+    transport concern, not a content transform; calls
+    `_check_zip_invariants` inline)
+  - `test_split_roundtrip_survives_simulated_translation_across_parts`
+    (a `«PL»` marker applied independently to each part, as DeepL would
+    when each part is translated in its own request, survives merge +
+    restore for every chapter regardless of which part it landed in)
+  - `test_split_roundtrip_tolerates_stripped_part_markers` (regression
+    test, BLOCK cycle 1 on task #22: a translator that strips
+    `data-part`/`data-parts-total` — e.g. because it doesn't recognise the
+    attribute — must not crash restore and must not trigger a
+    false-positive marker-mismatch WARN either; markers absent from every
+    part are silent by design, since the real completeness gate is the
+    section-vs-spine set equality, unaffected by the part markers.
+    Symmetric to
+    `test_adversarial_translation_strips_data_attribute_surfaces_precise_error`,
+    which covers `data-source-href` stripping — that one must fail, this
+    one must succeed.)
 
-### 7.3 `tests/integration/test_epub3.py`
+### 7.3 EPUB 3.x-specific coverage (`test_roundtrip.py`, `test_cli.py`, `test_epubcheck.py`)
 
-EPUB 3.x-specific round-trips, built via the `epub_version="3.0"`
-factory parameters (§3).
+No standalone `test_epub3.py` exists or is planned — EPUB 3.x round-trips are
+exercised inline within the general integration suites, built via the
+`epub_version="3.0"` factory parameters (§3).
 
-- `test_roundtrip_epub3_with_both_navs_ncx_and_nav_doc`
-- `test_roundtrip_epub3_nav_only_no_ncx`
-- `test_roundtrip_epub3_nav_doc_in_spine`
-- `test_navdoc_toc_labels_match_heading_text_after_simulated_translation`
-  *(SM-3 extended to EPUB 3.x — mirrors
-  `test_navlabel_matches_heading_text_after_simulated_translation`)*
-- `test_navdoc_and_ncx_labels_agree_for_heading_bearing_entries_when_both_present`
-- `test_prepare_html_emits_nav_doc_section_with_data_nav_doc_marker`
-  (non-spine nav: `data-source-href` + `data-nav-doc="true"`)
-- `test_prepare_html_nav_doc_in_spine_annotates_existing_spine_section`
-- `test_prepare_html_page_list_nav_marked_translate_no`
-- `test_restore_rejects_translated_html_missing_nav_doc_section`
-  *(`TranslatedHtmlMismatch`)*
-- `test_restore_writes_nav_doc_bytes_even_when_resolve_pass_finds_no_labels`
-  (fallback to `nav_doc.raw_bytes`, per §5.4 step 6)
-- `test_zip_packaging_invariants_hold_after_epub3_roundtrip`
-- `test_epubcheck_zero_drift_synthetic_epub3_both_navs` *(SM-4, EPUB 3.x)*
+**`tests/integration/test_roundtrip.py`**
+
+- `test_roundtrip_epub3_both_navs_synth` (NCX + non-spine nav doc, both
+  present exactly once in the output ZIP)
+- `test_roundtrip_epub3_nav_only_synth` (nav doc only, no NCX — FR-4's
+  EPUB 3.x optional-NCX case)
+- `test_roundtrip_epub3_nav_in_spine_synth` (nav doc also a spine item,
+  written via the ordinary spine path rather than the non-spine fallback)
+- `test_epub3_nav_labels_consistent_with_ncx_after_translation` (SM-3
+  extended to EPUB 3.x — nav-doc toc labels and NCX navLabels resolve to
+  the same translated heading text)
+- `test_epub3_nav_toc_entry_keeps_translated_label_when_anchor_unresolvable`
+  (a toc entry whose target has no resolvable heading keeps DeepL's own
+  translated link text instead of a heading-derived label — the nav-doc
+  counterpart of NCX's `resolve_label` fallback)
+- `test_epub3_payload_marks_nav_doc_and_page_list_no_translate`
+  (`data-nav-doc="true"` marker on the non-spine nav section, US-008's
+  page-list `translate="no"` exclusion)
+- `test_epub3_in_spine_nav_doc_annotated_once_with_both_markers` (an
+  in-spine nav doc's section carries `data-spine-idx` and `data-nav-doc`
+  together, emitted exactly once — never duplicated as a separate
+  non-spine section)
+- `test_epub3_missing_nav_section_raises_mismatch` (stripping the nav
+  doc's own `data-source-href` section raises `TranslatedHtmlMismatch` —
+  SM-7/C-4, the nav-doc counterpart of
+  `test_adversarial_translation_strips_data_attribute_surfaces_precise_error`)
+
+Each of the eight tests above calls the shared `_check_zip_invariants` helper
+inline, so zip-packaging invariants (mimetype-first, STORED, `flag_bits=0`,
+DEFLATED tail) are asserted on every EPUB 3.x round-trip without a separate
+named test.
+
+**`tests/integration/test_cli.py`**
+
+- `test_restore_epub3_exit_code_1_on_missing_nav_section` (CLI-level
+  counterpart of `test_epub3_missing_nav_section_raises_mismatch`: exit
+  code 1, `[ERROR]` on stderr)
+
+**`tests/integration/test_epubcheck.py`**
+
+- `test_roundtrip_zero_epubcheck_drift_synthetic_epub3` *(SM-4, EPUB 3.x —
+  both NCX and nav doc)*
+- `test_roundtrip_zero_epubcheck_drift_synthetic_epub3_landmarks_page_list`
+  (nav doc carrying landmarks + page-list navs, US-008's `translate="no"`
+  exclusion)
+- `test_roundtrip_zero_epubcheck_drift_synthetic_epub3_nav_only` (nav doc
+  only, no NCX)
+
+### 7.4 `tests/integration/test_epubcheck.py`
+
+Extends the SM-4 `epubcheck` zero-drift baseline (§7.3) to the auto-split
+feature: a forced multi-part split must not introduce any new `epubcheck`
+finding versus the un-split round-trip.
+
+- `test_roundtrip_zero_epubcheck_drift_forced_split` (`--max-chars` forced
+  below the payload size to guarantee a multi-part split on a synthetic
+  fixture; `epubcheck` fatal/error/warning counts on the restored output
+  match the un-split baseline exactly — splitting is purely a transport
+  concern and must not corrupt spine ordering, anchors, or nav entries)
 
 ---
 

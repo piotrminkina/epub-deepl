@@ -7,10 +7,12 @@ C-1 (ZIP invariants on every round-trip output), C-4 (adversarial fixture).
 from __future__ import annotations
 
 import io
+import logging
 import pathlib
 import struct
 import time
 import zipfile
+from collections.abc import Callable
 
 import pytest
 
@@ -126,6 +128,85 @@ def _adversarial_translation(html: str, seed: int = 42) -> str:
     result = result.replace("&mdash;", "&#8212;").replace("&ndash;", "&#8211;")
 
     return result
+
+
+def _wide_epub_bytes_for_split(n_chapters: int = 5, filler: int = 400) -> bytes:
+    """A synthetic EPUB 3 with `n_chapters`, each padded to `filler` chars
+    and carrying a per-chapter `unique-marker-N`, sized so a modest
+    `--max-chars` reliably forces `build_split` into more than one part.
+
+    Passes an explicit `nav_map` (one entry per chapter, no fragment) --
+    `build_minimal_epub`'s auto-derivation falls back to a hardcoded
+    3-entry template referencing `#ch1-heading`/`#ch2-heading`/
+    `#ch3-heading` once `len(xhtmls) >= 3`, anchors that don't exist in
+    these padded bodies.
+    """
+    xhtmls = [
+        XhtmlSpec(
+            href=f"ch{i:02d}.xhtml",
+            title=f"Chapter {i}",
+            body_html=f"<p>{'X' * filler} unique-marker-{i}</p>",
+        )
+        for i in range(1, n_chapters + 1)
+    ]
+    nav_map = [
+        NavPointSpec(label=f"Chapter {i}", src=f"ch{i:02d}.xhtml", nav_id=f"navPoint-{i}")
+        for i in range(1, n_chapters + 1)
+    ]
+    return build_minimal_epub(epub_version="3.0", xhtmls=xhtmls, nav_map=nav_map)
+
+
+def _max_chars_forcing_split(epub_bytes: bytes) -> int:
+    """Compute `--max-chars` from the payload's own measured envelope/
+    preamble/section lengths (rather than a guessed constant) so packing
+    reliably yields >1 parts -- same technique as
+    tests/unit/test_payload_split.py."""
+    from epub_deepl.epub.reader import read_epub_bytes
+    from epub_deepl.merge.builder import _PART_MARKER_RESERVE, _build_plan
+
+    epub = read_epub_bytes(epub_bytes)
+    plan = _build_plan(epub)
+    envelope_len = len(plan.envelope_open) + len(plan.envelope_close)
+    # Use the LARGEST section, not sections[0] -- for an EPUB 3 fixture,
+    # section 0 is often the (small) non-spine nav doc, not a chapter, and
+    # sizing off it would starve the budget for the actual chapters.
+    max_section_len = max(len(section.html) for section in plan.sections)
+    return envelope_len + _PART_MARKER_RESERVE + len(plan.preamble) + 2 * max_section_len
+
+
+def _split_roundtrip(
+    epub_bytes: bytes,
+    max_chars: int,
+    target_lang: str = "en",
+    transform: Callable[[str], str] | None = None,
+) -> bytes:
+    """Run prepare (split) + restore (merge) on in-memory bytes, mirroring
+    `_roundtrip` but exercising `build_split` / `merge_translated_docs`
+    instead of the single-file path.
+
+    `transform`, if given, simulates a per-part translation pass (e.g.
+    `_simulated_translation`) applied to each part's HTML independently
+    before parsing -- as DeepL would, translating each part in its own
+    request. Returns output EPUB bytes.
+    """
+    from epub_deepl.epub.reader import read_epub_bytes
+    from epub_deepl.merge.builder import build_split
+    from epub_deepl.restore.applier import apply_and_write_bytes
+    from epub_deepl.restore.parser import merge_translated_docs, parse_translated_html_bytes
+
+    epub = read_epub_bytes(epub_bytes)
+    if not epub.metadata.language:
+        epub.metadata.language = "und"
+    parts = build_split(epub, max_chars=max_chars)
+    assert len(parts) > 1, "test setup must actually force a split"
+
+    docs = []
+    for i, part_html in enumerate(parts, start=1):
+        translated = transform(part_html) if transform else part_html
+        docs.append((f"part{i}.html", parse_translated_html_bytes(translated.encode("utf-8"))))
+
+    doc = merge_translated_docs(docs)
+    return apply_and_write_bytes(epub, doc, target_lang)
 
 
 # ---------------------------------------------------------------------------
@@ -385,6 +466,37 @@ def test_adversarial_translation_strips_data_attribute_surfaces_precise_error() 
 
     with pytest.raises(TranslatedHtmlMismatch):
         apply_and_write_bytes(epub, doc, "pl")
+
+
+@pytest.mark.integration
+def test_split_roundtrip_tolerates_stripped_part_markers(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A translator that strips data-part/data-parts-total (e.g. because it
+    doesn't recognise the attribute) must not crash restore, and must not
+    trigger a false-positive marker-mismatch WARN either -- markers absent
+    from every part are silent by design (the real completeness gate is the
+    section-vs-spine set equality in validate_translated_html, unaffected by
+    the part markers). Symmetric to
+    test_adversarial_translation_strips_data_attribute_surfaces_precise_error,
+    which covers data-source-href stripping -- that one must fail, this one
+    must succeed. Regression test for BLOCK cycle 1 on task #22."""
+    import re
+
+    epub_bytes = _wide_epub_bytes_for_split()
+    max_chars = _max_chars_forcing_split(epub_bytes)
+
+    def _strip_part_markers(html: str) -> str:
+        return re.sub(r'\s+data-part="\d+"\s+data-parts-total="\d+"', "", html)
+
+    with caplog.at_level(logging.WARNING, logger="epub_deepl.restore.parser"):
+        output = _split_roundtrip(epub_bytes, max_chars, transform=_strip_part_markers)
+    _check_zip_invariants(output)
+
+    for i in range(1, 6):
+        text = _text_content_of_xhtml(output, f"ch{i:02d}.xhtml")
+        assert f"unique-marker-{i}" in text
+    assert caplog.records == []
 
 
 @pytest.mark.integration
@@ -884,3 +996,41 @@ def test_roundtrip_preserves_non_ascii_content_end_to_end(
         # must NOT appear anywhere.
         mojibake = fragment.encode("utf-8").decode("latin-1").encode("utf-8")
         assert mojibake not in blob, f"{label}: mojibake leaked through for {fragment!r}"
+
+
+# ---------------------------------------------------------------------------
+# Payload splitting (WP4-WP6 — see docs/adr/0006)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+def test_split_roundtrip_preserves_content_losslessly() -> None:
+    """build_split + merge_translated_docs + apply produces the same
+    zip-invariant, content-complete EPUB as the unsplit path — splitting
+    is purely a transport concern, not a content transform."""
+    epub_bytes = _wide_epub_bytes_for_split()
+    max_chars = _max_chars_forcing_split(epub_bytes)
+
+    output = _split_roundtrip(epub_bytes, max_chars=max_chars)
+    _check_zip_invariants(output)
+
+    for i in range(1, 6):
+        text = _text_content_of_xhtml(output, f"ch{i:02d}.xhtml")
+        assert f"unique-marker-{i}" in text
+
+
+@pytest.mark.integration
+def test_split_roundtrip_survives_simulated_translation_across_parts() -> None:
+    """A «PL» marker applied independently to EACH part (as DeepL would,
+    translating each part in its own request) survives merge + restore
+    for every chapter, regardless of which part it landed in."""
+    epub_bytes = _wide_epub_bytes_for_split()
+    max_chars = _max_chars_forcing_split(epub_bytes)
+
+    output = _split_roundtrip(epub_bytes, max_chars=max_chars, transform=_simulated_translation)
+    _check_zip_invariants(output)
+
+    for i in range(1, 6):
+        text = _text_content_of_xhtml(output, f"ch{i:02d}.xhtml")
+        assert "«PL»" in text
+        assert f"unique-marker-{i}" in text

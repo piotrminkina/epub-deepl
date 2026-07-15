@@ -67,13 +67,20 @@ step.
 # 1. Bundle the EPUB into a single HTML for DeepL
 epub-deepl prepare path/to/book.epub
 #   → produces path/to/book.prepare.html
+#   → a payload over --max-chars (default 900,000) is instead split at
+#     section boundaries into book.prepare.1of2.html, book.prepare.2of2.html, ...
 
-# 2. Upload book.prepare.html to https://www.deepl.com/translator/files,
-#    choose target language, download the translated HTML.
+# 2. Upload the file(s) to https://www.deepl.com/translator/files,
+#    choose target language, download the translated HTML. Translate
+#    every part separately when the payload was split.
 
 # 3. Reassemble the translated EPUB
 epub-deepl restore path/to/book.epub path/to/book.translated.html
 #   → produces path/to/book.translated.epub
+#   → when the payload was split, pass every translated part instead,
+#     in any order:
+#     epub-deepl restore path/to/book.epub \
+#       path/to/book.translated.1of2.html path/to/book.translated.2of2.html
 ```
 
 The target language is auto-detected from the translated HTML's
@@ -113,8 +120,8 @@ compatible venv exists.
 
 | Command | Description |
 |---|---|
-| `epub-deepl prepare <input.epub>` | Validate input and emit `<stem>.prepare.html` |
-| `epub-deepl restore <input.epub> <translated.html> [--lang <code>]` | Validate translated HTML against the input EPUB and emit `<stem>.translated.epub`. `--lang` is optional (auto-detected from `<html lang>`). |
+| `epub-deepl prepare <input.epub> [--max-chars N]` | Validate input and emit `<stem>.prepare.html` — or `<stem>.prepare.1ofN.html`, `<stem>.prepare.2ofN.html`, … when the payload exceeds `--max-chars` |
+| `epub-deepl restore <input.epub> <translated.html>... [--lang <code>]` | Validate translated HTML against the input EPUB and emit `<stem>.translated.epub`. Accepts one file, or every part of a split payload in any order. `--lang` is optional (auto-detected from `<html lang>`). |
 | `epub-deepl --help` | Top-level usage |
 | `<subcommand> --help` | Flags for a specific subcommand |
 
@@ -126,8 +133,15 @@ Common flags on both subcommands:
 | `--force` | Overwrite existing output (does NOT bypass input-equals-output guard) |
 | `--verbose` | Per-file progress to stderr |
 
+Flag specific to `prepare`:
+
+| Flag | Effect |
+|---|---|
+| `--max-chars N` | Split the payload at section boundaries whenever it would exceed `N` characters (default `900,000`, a ~10% margin under DeepL's 1,000,000-character document limit). `--max-chars 0` disables splitting; a payload under the threshold is unaffected — output is byte-identical to today's single file. |
+
 Exit codes: `0` success, `1` user error (bad input / validation failure /
-output collision), `2` internal error.
+output collision / a single section too large to fit any part), `2` internal
+error.
 
 ## How It Works
 
@@ -155,6 +169,19 @@ landmarks, and page-list all get translated — and afterwards its
 resolution used for NCX, so both navigation documents stay TOC ↔
 heading-consistent when a book ships both.
 
+When the merged payload would exceed `--max-chars`, `prepare` packs
+sections into multiple parts instead of raising an error — never
+splitting inside a section, only between them. Every part carries the
+full envelope (OPF metadata header, NCX block, `<html lang>`), so each
+one translates as a complete, self-contained document; only the first
+part carries the shared preamble to avoid duplicating it across parts.
+`restore` accepts every translated part in any order and merges them
+back into a single document before the usual per-file rebuild — order
+never matters because sections are re-associated by their
+`data-source-href`, not by which file they arrived in. See
+[ADR-0006](docs/adr/0006-auto-split-oversized-payloads.md) for the
+full design rationale.
+
 Detailed architecture and edge cases:
 [`docs/plans/tech-spec.md`](docs/plans/tech-spec.md).
 
@@ -171,6 +198,9 @@ Detailed architecture and edge cases:
 - Solo-user CLI workflow with manual upload / download to DeepL
 - Pre-flight validation of the input EPUB (fail-fast on DRM, broken
   manifest, broken spine, non-XHTML spine items, missing NCX/nav document)
+- Automatic splitting of oversized payloads across multiple DeepL
+  documents at section boundaries (see
+  [ADR-0006](docs/adr/0006-auto-split-oversized-payloads.md))
 
 ### Out of scope
 
@@ -179,7 +209,6 @@ Detailed architecture and edge cases:
 - DRM-protected EPUBs (detected and rejected; never supported)
 - Automated DeepL API integration (user uploads manually)
 - Automated `epubcheck` invocation (manual user step)
-- Books exceeding DeepL's per-document character limit
 - GUI, web interface, daemon mode, multi-user features
 - Translation memory, caching, or glossary support
 
@@ -213,8 +242,10 @@ Known limitations:
   the same string and may differ slightly
 - Apple Books / Calibre-specific metadata quirks — observed but not
   specially handled
-- Books exceeding DeepL's per-document character limit (~1 MB+) — no
-  automatic chunking; user falls back to per-chapter workflow
+- A single chapter/section exceeding `--max-chars` still can't be
+  split — auto-split only ever breaks between sections, never inside
+  one. Raise `--max-chars` or split the offending chapter in the
+  source EPUB.
 
 ## License
 
@@ -222,6 +253,7 @@ MIT — see [LICENSE](LICENSE).
 
 ---
 
-*A 1 MB book translated as one DeepL document instead of 30 chapters: the
-math works out to 30× the books you can translate per month, with a TOC
-that actually matches the chapter headings.*
+*A book translated as one DeepL document — or N for oversized books —
+instead of one per chapter: the math still works out to many more books
+per month than the naive per-chapter workflow, with a TOC that actually
+matches the chapter headings.*

@@ -7,10 +7,9 @@ NCX nav block is flattened into a single <ol> with data-ncx-depth to
 preserve hierarchy information without requiring DeepL to handle nesting.
 
 `build()` extracts a `_PayloadPlan` from the Epub model, then renders it
-into one document. The plan/render split exists so a future work package
-can pack `_PayloadSection`s across multiple payload documents (DeepL's
-per-document character limit) without touching the data-extraction logic
-here — see docs/adr/0006 (auto-split).
+into one document. `build_split()` packs the same plan's `_PayloadSection`s
+across multiple payload documents when the single-document render exceeds
+DeepL's per-document character limit — see docs/adr/0006 (auto-split).
 """
 
 from __future__ import annotations
@@ -22,12 +21,27 @@ from epub_deepl.epub._safe_parser import parse_xml_recover
 from epub_deepl.epub.model import Epub, NavPoint
 from epub_deepl.epub.nav import extract_nav_body_html
 from epub_deepl.epub.xhtml import count_ruby_elements
+from epub_deepl.errors import InternalError, OversizedSection
 from epub_deepl.logging_setup import get_logger
 
 _log = get_logger("merge.builder")
 
 # XHTML namespace for title extraction
 _XHTML_NS = "http://www.w3.org/1999/xhtml"
+
+#: DeepL's document-translation limit is 1,000,000 chars; 900k leaves a
+#: ~10% margin. See docs/adr/0006.
+DEFAULT_MAX_CHARS = 900_000
+
+#: Fixed budgetary allowance for the `data-part="N" data-parts-total="M"`
+#: attribute text added to `<body>` once a document is split into more than
+#: one part. Budgeting uses the *unmarked* envelope length (see
+#: `_build_plan`'s `envelope_open`) plus this reserve, rather than the
+#: actual marked length, because the marked length depends on the final
+#: part count — which packing itself is still computing. 64 chars is
+#: comfortably above the ~50 chars the marker text occupies even at
+#: four-digit part counts.
+_PART_MARKER_RESERVE = 64
 
 
 @dataclass(frozen=True)
@@ -52,12 +66,21 @@ class _PayloadPlan:
     document only. `sections` is the full ordered list — the non-spine
     EPUB 3 nav doc (if any) first, then spine sections in spine order —
     ready to be packed across one or more documents.
+
+    `envelope_open` is always the unmarked (`part=None`) rendering — the
+    one `_render_single` uses for the single-document case. `build_split`
+    re-renders a marked envelope per part from `source_lang`/`title`/
+    `description`/`has_description` instead of reusing `envelope_open`.
     """
 
     envelope_open: str
     preamble: str
     sections: list[_PayloadSection]
     envelope_close: str
+    source_lang: str
+    title: str
+    description: str
+    has_description: bool
 
 
 def build(epub: Epub) -> str:
@@ -76,6 +99,115 @@ def _render_single(plan: _PayloadPlan) -> str:
     return "".join(parts)
 
 
+def build_split(epub: Epub, max_chars: int = DEFAULT_MAX_CHARS) -> list[str]:
+    """Split epub's translation payload across one or more documents.
+
+    Packs whole `<section>` elements in spine order — never inside a
+    section — so each returned document stays within `max_chars`
+    characters. Returns a single-element list, byte-identical to
+    `build(epub)`, when `max_chars <= 0`, the single-document render
+    already fits, or there are no sections to pack (nothing to split).
+
+    Raises:
+        OversizedSection: one section alone exceeds the budget of a fresh
+            part; raise --max-chars or split that chapter in the source.
+        InternalError: a packed part still exceeds max_chars (packing bug).
+    """
+    plan = _build_plan(epub)
+    single = _render_single(plan)
+    if max_chars <= 0 or not plan.sections or len(single) <= max_chars:
+        return [single]
+
+    envelope_len = len(plan.envelope_open) + len(plan.envelope_close)
+    groups = _pack_sections(
+        plan.sections,
+        max_chars=max_chars,
+        envelope_len=envelope_len,
+        preamble_len=len(plan.preamble),
+    )
+    total = len(groups)
+
+    rendered = [
+        _render_part(plan, group, index=index, total=total)
+        for index, group in enumerate(groups, start=1)
+    ]
+
+    for index, part_html in enumerate(rendered, start=1):
+        if len(part_html) > max_chars:
+            raise InternalError(
+                f"packed part {index}/{total} is {len(part_html):,} chars, "
+                f"which exceeds --max-chars {max_chars:,} (packing bug — "
+                f"the {_PART_MARKER_RESERVE}-char marker reserve was insufficient)"
+            )
+
+    return rendered
+
+
+def _pack_sections(
+    sections: list[_PayloadSection],
+    *,
+    max_chars: int,
+    envelope_len: int,
+    preamble_len: int,
+) -> list[list[_PayloadSection]]:
+    """Greedily pack sections into budget-respecting groups, spine order preserved."""
+
+    def budget(part_number: int) -> int:
+        remaining = max_chars - envelope_len - _PART_MARKER_RESERVE
+        if part_number == 1:
+            remaining -= preamble_len
+        return remaining
+
+    groups: list[list[_PayloadSection]] = []
+    current: list[_PayloadSection] = []
+    current_len = 0
+
+    for section in sections:
+        part_number = len(groups) + 1
+        sec_len = len(section.html)
+        if current and current_len + sec_len > budget(part_number):
+            groups.append(current)
+            current = []
+            current_len = 0
+            part_number = len(groups) + 1
+
+        fresh_part_budget = budget(part_number)
+        if sec_len > fresh_part_budget:
+            raise OversizedSection(
+                f"section {section.href!r} is {sec_len:,} chars, exceeding the "
+                f"per-part budget of {fresh_part_budget:,} chars at "
+                f"--max-chars {max_chars:,}; raise --max-chars or split this "
+                f"chapter in the source EPUB"
+            )
+        current.append(section)
+        current_len += sec_len
+
+    if current:
+        groups.append(current)
+    return groups
+
+
+def _render_part(
+    plan: _PayloadPlan,
+    group: list[_PayloadSection],
+    *,
+    index: int,
+    total: int,
+) -> str:
+    """Render one part of a split payload: envelope + (preamble if part 1) + sections."""
+    part_marker = (index, total) if total >= 2 else None
+    parts = [
+        _body_open(
+            plan.source_lang, plan.title, plan.description, plan.has_description, part_marker
+        )
+    ]
+    if index == 1:
+        parts.append(plan.preamble)
+    parts.extend(section.html for section in group)
+    parts.append(plan.envelope_close)
+    return "".join(parts)
+
+
 def _build_plan(epub: Epub) -> _PayloadPlan:
     """Extract everything `_render_single` needs from `epub` into a `_PayloadPlan`."""
     meta = epub.metadata
@@ -89,6 +221,10 @@ def _build_plan(epub: Epub) -> _PayloadPlan:
         preamble=_build_preamble(epub),
         sections=_build_sections(epub),
         envelope_close="</body>\n</html>\n",
+        source_lang=source_lang,
+        title=title,
+        description=description,
+        has_description=has_description,
     )
 
 
