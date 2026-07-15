@@ -44,6 +44,12 @@ Thumbs.db
 *.prepare.html
 *.translated.epub
 
+# Corpus EPUBs — a contributor's own books stay out of git; only the two
+# bundled Project Gutenberg Alice fixtures (EPUB 2 + EPUB 3) are tracked.
+/tests/corpus/*.epub
+!/tests/corpus/alice-pg11.epub
+!/tests/corpus/alice-pg11-epub3.epub
+
 # Local smoke / scratch
 /tmp_local/
 /smoke/
