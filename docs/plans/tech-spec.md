@@ -1001,9 +1001,10 @@ and asserts the result remains inside the EPUB root.
 ## 11. Concurrency Model
 
 None. The tool is single-process, single-threaded, synchronous. The
-entire EPUB is processed in memory. For the 4-EPUB corpus, peak memory
-is below 200 MB (largest book is ~30 MB compressed, ~60 MB
-decompressed). This is acceptable for the target user (single workstation).
+entire EPUB is processed in memory. For a typical corpus book, peak
+memory stays below 200 MB (a ~30 MB compressed / ~60 MB decompressed
+technical book is the practical upper bound observed). This is
+acceptable for the target user (single workstation).
 
 If memory ever becomes a concern (e.g. ≥ 200 MB books), the design would
 shift to streaming OPF/NCX processing and on-demand XHTML reads from the

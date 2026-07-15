@@ -45,7 +45,7 @@ CI gate (`fail_under = 85`); 100% on `epub/validator.py` and `epub/writer.py`
 | Unit | ~50 tests | < 5 s total |
 | Integration (synth) | ~25 tests | < 10 s total |
 | Integration (CLI) | ~15 tests | < 15 s total |
-| Integration (corpus) | ~15 tests (~4 books × ~3 scenarios) | < 60 s total |
+| Integration (corpus) | scales with corpus size (~4 scenarios × each corpus book; 2 books bundled, more via `EPUB_DEEPL_CORPUS`) | < 60 s total |
 
 Total: ~105 tests, < 90 s wall-clock with `pytest-xdist`.
 

@@ -108,7 +108,8 @@ external command invocation in MVP), `urllib` (no network), `os.system`
 
 - **`pytest` ≥ 8**
   - Why: idiomatic Python testing; powerful fixtures; matches PRD's
-    requirement for parametrized tests across the 4-EPUB test corpus.
+    requirement for parametrized tests across the EPUB test corpus
+    (bundled books plus any `EPUB_DEEPL_CORPUS` library).
 
 ### Test plugins
 
